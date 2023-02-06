@@ -1,0 +1,15 @@
+-I /usr/local/src/ETSI_Release/LC3plus_ETSI_src_v172062927c2_20210930/src/fixed_point
+
+-root vavi.sound.lc3.jna
+
+//-parseInOneChunk
+-runtime JNA
+
+//-o "$(DIR)/../java" // overwrite versioned files instead of writing to target/generated-sources/java
+
+//-v
+//-choicesOut "$(DIR)/lc3.choices"
+
+/usr/local/src/ETSI_Release/LC3plus_ETSI_src_v172062927c2_20210930/src/fixed_point/lc3.h
+
+-h
