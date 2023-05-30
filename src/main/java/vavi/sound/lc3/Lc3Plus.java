@@ -7,6 +7,7 @@ package vavi.sound.lc3;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.ShortBuffer;
 import java.util.ArrayList;
 import java.util.List;
@@ -14,6 +15,7 @@ import java.util.logging.Level;
 
 import com.sun.jna.Memory;
 import com.sun.jna.Native;
+import com.sun.jna.NativeLong;
 import com.sun.jna.Pointer;
 import com.sun.jna.ptr.PointerByReference;
 import vavi.io.LittleEndianDataInputStream;
@@ -24,8 +26,6 @@ import vavi.util.Debug;
 import static vavi.sound.lc3.jna.Lc3Library.ERROR_MESSAGES;
 import static vavi.sound.lc3.jna.Lc3Library.INSTANCE;
 import static vavi.sound.lc3.jna.Lc3Library.LC3PLUS_MAX_BYTES;
-import static vavi.sound.lc3.jna.Lc3Library.LC3PLUS_MAX_CHANNELS;
-import static vavi.sound.lc3.jna.Lc3Library.LC3PLUS_MAX_SAMPLES;
 
 
 /**
@@ -59,30 +59,22 @@ public class Lc3Plus {
 
     Memory bytes;
 
-    static class SafeMemory extends Memory {
-        static {
-            Runtime.getRuntime().addShutdownHook(new Thread(() -> SafeMemory.mems.forEach(Memory::close)));
-        }
-        /** */
-        static List<Memory> mems = new ArrayList<>();
-        SafeMemory(long size) {
-            super(size);
-            mems.add(this);
-        }
-    }
-
     /** */
     public Lc3Plus() {
-        bytes = new SafeMemory(LC3PLUS_MAX_BYTES);
+        bytes = new Memory(LC3PLUS_MAX_BYTES);
     }
 
     /** */
     private Memory scratch;
+    /** */
+    private Memory output16;
+    /** */
+    private Memory[] c16;
 
     /** init decoder */
     public void init() throws IOException {
         int size = INSTANCE.lc3plus_dec_get_size(sampleRate, nChannels, plcMode);
-        Memory m = new SafeMemory(size);
+        Memory m = new Memory(size);
 Debug.println(Level.FINER, m.size() + ", " + m);
         decoder.setPointer(m);
 
@@ -107,34 +99,30 @@ Debug.println(Level.FINE, "nSamples: " + nSamples);
 
         scratch_size = INSTANCE.lc3plus_dec_get_scratch_size(decoder);
 Debug.println(Level.FINE, "scratch_size: " + scratch_size);
-        scratch = new SafeMemory(scratch_size);
+        scratch = new Memory(scratch_size);
 Debug.println(Level.FINE, "Native.POINTER_SIZE: " + Native.POINTER_SIZE);
+
+        output16 = new Memory((long) nChannels * Native.POINTER_SIZE);
+        c16 = new Memory[nChannels];
+        for (int i = 0; i < nChannels; i++) {
+            c16[i] = new Memory(nSamples * Short.SIZE);
+            output16.setPointer((long) i * Native.POINTER_SIZE, c16[i]);
+        }
     }
 
     /** decode */
     public byte[] decode(int nBytes) throws IOException {
 
-        Memory output16 = new Memory((long) LC3PLUS_MAX_CHANNELS * Native.POINTER_SIZE);
-        Memory[] c16 = new Memory[nChannels];
-        for (int i = 0; i < nChannels; i++) {
-            c16[i] = new Memory(LC3PLUS_MAX_SAMPLES * Short.SIZE);
-            output16.setPointer((long) i * Native.POINTER_SIZE, c16[i]);
-        }
-
-Debug.println(Level.FINE, "decode: " + nBytes + ", " + bfi_ext);
-        int r = INSTANCE.lc3plus_dec16(decoder, bytes, nBytes, new PointerByReference(output16), scratch, bfi_ext);
+Debug.println(Level.FINER, "decode: " + nBytes + ", " + bfi_ext);
+        int r = INSTANCE.lc3plus_dec16(decoder, bytes, nBytes, new NativeLong(Pointer.nativeValue(output16)), scratch, bfi_ext);
         if (r != LC3PLUS_Error.LC3PLUS_OK) {
             throw new IOException("lc3plus_dec16: " + ERROR_MESSAGES[r]);
         }
-Debug.println(Level.FINE, "here");
+Debug.println(Level.FINEST, "here");
 
-        ByteBuffer bb = ByteBuffer.allocate(nSamples * nChannels * 2);
+        ByteBuffer bb = ByteBuffer.allocate(nSamples * nChannels * Short.SIZE).order(ByteOrder.nativeOrder());
+
         interleave(c16, bb.asShortBuffer(), nSamples, nChannels);
-
-        for (int i = 0; i < nChannels; i++) {
-            c16[i].close();
-        }
-        output16.close();
 
         return bb.array();
     }

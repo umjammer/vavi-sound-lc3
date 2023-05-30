@@ -5,6 +5,7 @@ import java.nio.IntBuffer;
 import com.sun.jna.Library;
 import com.sun.jna.Native;
 import com.sun.jna.NativeLibrary;
+import com.sun.jna.NativeLong;
 import com.sun.jna.Pointer;
 import com.sun.jna.PointerType;
 import com.sun.jna.ptr.IntByReference;
@@ -813,6 +814,8 @@ public interface Lc3Library extends Library {
      * <i>native declaration : lc3.h:368</i>
      */
     int lc3plus_dec16(PointerByReference decoder, Pointer input_bytes, int num_bytes, PointerByReference output_samples, Pointer scratch, int bfi_ext);
+
+    int lc3plus_dec16(PointerByReference decoder, Pointer input_bytes, int num_bytes, NativeLong output_samples, Pointer scratch, int bfi_ext);
 
     /**
      * Decode compressed LC3 frame to 24 bit PCM output.<br>
