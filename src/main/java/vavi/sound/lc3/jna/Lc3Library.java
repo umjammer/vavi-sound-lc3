@@ -242,17 +242,17 @@ public interface Lc3Library extends Library {
     /** <i>native declaration : lc3.h</i> */
     int LC3PLUS_MAX_CHANNELS = 2;
     /** <i>native declaration : lc3.h</i> */
-    int LC3PLUS_MAX_SAMPLES = 480;
+    int LC3PLUS_MAX_SAMPLES = 960;
     /** <i>native declaration : lc3.h</i> */
-    int LC3PLUS_MAX_BYTES = 870;
+    int LC3PLUS_MAX_BYTES = (625 * LC3PLUS_MAX_CHANNELS);
     /** <i>native declaration : lc3.h</i> */
-    int LC3PLUS_ENC_MAX_SIZE = 7226;
+    int LC3PLUS_ENC_MAX_SIZE = 12628;
     /** <i>native declaration : lc3.h</i> */
-    int LC3PLUS_DEC_MAX_SIZE = 28446;
+    int LC3PLUS_DEC_MAX_SIZE = 42488;
     /** <i>native declaration : lc3.h</i> */
-    int LC3PLUS_ENC_MAX_SCRATCH_SIZE = 6784;
+    int LC3PLUS_ENC_MAX_SCRATCH_SIZE = 45624;
     /** <i>native declaration : lc3.h</i> */
-    int LC3PLUS_DEC_MAX_SCRATCH_SIZE = 27474;
+    int LC3PLUS_DEC_MAX_SCRATCH_SIZE = 59768;
 
     /**
      * Return library version number. It should match LC3PLUS_VERSION.<br>
@@ -297,7 +297,7 @@ public interface Lc3Library extends Library {
      * @deprecated use the safer method {@link #lc3plus_enc_init(com.sun.jna.ptr.PointerByReference, int, int)} instead
      */
     @Deprecated
-    int lc3plus_enc_init(Pointer encoder, int samplerate, int channels);
+    int lc3plus_enc_init(Pointer encoder, int samplerate, int channels, int hrmode);
 
     /**
      * Initialize LC3 encoder.<br>
@@ -314,7 +314,7 @@ public interface Lc3Library extends Library {
      * Original signature : <code>LC3PLUS_Error lc3plus_enc_init(LC3PLUS_Enc*, int, int)</code><br>
      * <i>native declaration : lc3.h:161</i>
      */
-    int lc3plus_enc_init(PointerByReference encoder, int samplerate, int channels);
+    int lc3plus_enc_init(PointerByReference encoder, int samplerate, int channels, int hrmode);
 
     /**
      * Encode LC3 frame with 16 bit input.<br>
@@ -735,7 +735,7 @@ public interface Lc3Library extends Library {
      * @deprecated use the safer method {@link #lc3plus_dec_init(com.sun.jna.ptr.PointerByReference, int, int, int)} instead
      */
     @Deprecated
-    int lc3plus_dec_init(Pointer decoder, int samplerate, int channels, int plc_mode);
+    int lc3plus_dec_init(Pointer decoder, int samplerate, int channels, int plc_mode, int hrmode);
 
     /**
      * Initialize LC3 decoder.<br>
@@ -753,7 +753,7 @@ public interface Lc3Library extends Library {
      * Original signature : <code>LC3PLUS_Error lc3plus_dec_init(LC3PLUS_Dec*, int, int, LC3PLUS_PlcMode)</code><br>
      * <i>native declaration : lc3.h:336</i>
      */
-    int lc3plus_dec_init(PointerByReference decoder, int samplerate, int channels, int plc_mode);
+    int lc3plus_dec_init(PointerByReference decoder, int samplerate, int channels, int plc_mode, int hrmode);
 
     /**
      * Decode compressed LC3 frame to 16 bit PCM output.<br>
@@ -1088,4 +1088,27 @@ public interface Lc3Library extends Library {
             super();
         }
     }
+
+    String[] ERROR_MESSAGES = {
+            "OK",                                                     /* LC3PLUS_OK                  */
+            "Function call failed!",                                  /* LC3PLUS_ERROR               */
+            "Frame failed to decode and was concealed!",              /* LC3PLUS_DECODE_ERROR        */
+            "Pointer argument is null!",                              /* LC3PLUS_NULL_ERROR          */
+            "Invalid sampling rate!",                                 /* LC3PLUS_SAMPLERATE_ERROR    */
+            "Invalid number of channels!",                            /* LC3PLUS_CHANNELS_ERROR      */
+            "Invalid bitrate!",                                       /* LC3PLUS_BITRATE_ERROR       */
+            "Invalid number of bytes!",                               /* LC3PLUS_NUMBYTES_ERROR      */
+            "Invalid PLC method!",                                    /* LC3PLUS_PLCMODE_ERROR       */
+            "Invalid EP mode!",                                       /* LC3_EPCLASS_ERROR           */
+            "Invalid frame ms value!",                                /* LC3PLUS_FRAMEMS_ERROR       */
+            "Invalid usage of hrmode, sampling rate and frame size",  /* LC3PLUS_HRMODE_ERROR        */
+            "Unaligned pointer!",                                     /* LC3PLUS_ALIGN_ERROR         */
+            "Invalid channel mode request!",                          /* LC3_CMR_ERROR               */
+            "Invalid usage of hrmode, sampling rate and frame size!", /* LC3PLUS_HRMODE_ERROR       */
+            "Bitrate has not been set!",                              /* LC3PLUS_BITRATE_UNSET_ERROR */
+            "Function can't be called after bitrate was set!",        /* LC3PLUS_BITRATE_SET_ERROR   */
+            "Invalid external bad frame index!",                      /* LC3PLUS_BFI_EXT_ERROR       */
+            "Generic Warning",                                        /* LC3PLUS_WARNING             */
+            "Invalid bandwidth frequency!"                            /* LC3PLUS_BW_WARNING          */
+    };
 }
