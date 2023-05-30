@@ -15,5 +15,7 @@
 
  * https://github.com/bluekitchen/libLC3plus
  * https://github.com/xiaojsoft/lc3codec.js
+ * https://github.com/google/liblc3
+ * https://kamedo2.hatenablog.jp/entry/2022/06/29/022100
 
 ## TODO

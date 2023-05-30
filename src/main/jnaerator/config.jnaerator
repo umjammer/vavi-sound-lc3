@@ -13,3 +13,5 @@
 /usr/local/src/ETSI_Release/LC3plus_ETSI_src_v172062927c2_20210930/src/fixed_point/lc3.h
 
 -h
+
+-DENABLE_HR_MODE
