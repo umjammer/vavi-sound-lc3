@@ -7,9 +7,14 @@
 
 [Fraunhofer LC3plus Codec](https://www.iis.fraunhofer.de/en/ff/amm/communication/lc3.html) for Java
 
+<img src="https://github.com/umjammer/vavi-image-avif/assets/493908/b1bce591-715c-4840-84e5-d6da0e628d32" width="200" />
+<sub><a href="https://www.iis.fraunhofer.de/en/ff/amm/communication/lc3.html">© Fraunhofer IIS</a></sub>
+
 ## Install
 
  * create libLC3plus.dylib ... https://github.com/bluekitchen/libLC3plus
+ * maven ... https://jitpack.io/#umjammer/vavi-sound-lc3
+ *  jvm option `-Djna.library.path=/dir/to/dylib`
 
 ## References
 
@@ -19,3 +24,6 @@
  * https://kamedo2.hatenablog.jp/entry/2022/06/29/022100
 
 ## TODO
+
+ * research difference between `NativeLong` and `PointerByReference` at method argument
+   * this time `NativeLong` works well and `PointerByReference` does not
