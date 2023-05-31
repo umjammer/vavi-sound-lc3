@@ -9,8 +9,6 @@ import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.ShortBuffer;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.logging.Level;
 
 import com.sun.jna.Memory;
@@ -36,173 +34,206 @@ import static vavi.sound.lc3.jna.Lc3Library.LC3PLUS_MAX_BYTES;
  */
 public class Lc3Plus {
 
-    /**  */
+    /** the decoder structure */
     private PointerByReference decoder = new PointerByReference();
 
-    // MUST be 8000 Hz, 16000 Hz, 24000 Hz, 32000 Hz, 44100 Hz, 48000 Hz or 96000 Hz
-    int sampleRate = 48000;
-    int bitrate;
-    int signal_len;
-    int hrmode;
+    // input data
 
-    // MUST be 10 ms, 5 ms or 2.5 ms
-    float frame_ms = 10;
+    /** MUST be 8000 Hz, 16000 Hz, 24000 Hz, 32000 Hz, 44100 Hz, 48000 Hz or 96000 Hz */
+    private int sampleRate = 48000;
+    private int bitrate;
+    private int signalLength;
+    private int channels;
+    /** MUST be 10 ms, 5 ms or 2.5 ms */
+    private float frameMs = 10;
+    private boolean epMode;
 
-    boolean epmode;
+    // options
 
-    int plcMode = LC3PLUS_PlcMode.LC3PLUS_PLC_ADVANCED;
-    int nChannels;
-    int nSamples;
+    private int plcMode = LC3PLUS_PlcMode.LC3PLUS_PLC_ADVANCED;
+    private boolean g192;
+    private int hrMode;
+    private int sampleSizeInBit = 16;
 
-    int scratch_size;
-    boolean g192;
+    // runtime
 
-    Memory bytes;
+    private LittleEndianDataInputStream ledis;
+
+    /** read buffer */
+    private Memory input;
+    /** scratch */
+    private int scratchSize;
+    /** scratch */
+    private Memory scratch;
+    /** pointer array */
+    private Memory output16s;
+    /** decoded samples */
+    private Memory[] output16ch;
+    /** */
+    private int samples;
+    /** */
+    private int bfiExt;
 
     /** */
-    public Lc3Plus() {
-        bytes = new Memory(LC3PLUS_MAX_BYTES);
+    public float getSampleRate() {
+        return sampleRate;
     }
 
     /** */
-    private Memory scratch;
+    public int getSampleSizeInBit() {
+        return sampleSizeInBit;
+    }
+
     /** */
-    private Memory output16;
+    public int getChannels() {
+        return channels;
+    }
+
     /** */
-    private Memory[] c16;
+    public InputStream getInputStream() {
+        return ledis;
+    }
+
+    /**
+     * Creates a decoder.
+     *
+     * @param in must be mark supported
+     */
+    public Lc3Plus(InputStream in) throws IOException {
+        in.mark(20);
+        try {
+            ledis = new LittleEndianDataInputStream(in);
+            int i = ledis.readUnsignedShort();
+            if (i != 0xcc1c) {
+                sampleRate = i * 100;
+                bitrate = ledis.readUnsignedShort() * 100;
+                channels = ledis.readUnsignedShort();
+Debug.println(Level.FINE, "sampleRate: " + sampleRate);
+Debug.println(Level.FINE, "bitrate: " + bitrate);
+Debug.println(Level.FINE, "channels: " + channels);
+                in.reset();
+                ledis.skipBytes(6);
+            } else {
+                int v = ledis.readUnsignedShort();
+Debug.println(Level.FINE, "v: " + v);
+                assert v >= 18;
+                sampleRate = ledis.readUnsignedShort() * 100;
+                bitrate = ledis.readUnsignedShort() * 100;
+                channels = ledis.readUnsignedShort();
+                frameMs = ledis.readUnsignedShort() / 100f;
+                epMode = ledis.readUnsignedShort() != 0;
+                signalLength = ledis.readInt();
+                hrMode = v > 18 ? ledis.readUnsignedShort() : 0;
+Debug.println(Level.FINE, "sampleRate: " + sampleRate);
+Debug.println(Level.FINE, "bitrate: " + bitrate);
+Debug.println(Level.FINE, "channels: " + channels);
+Debug.println(Level.FINE, "frameMs: " + frameMs);
+Debug.println(Level.FINE, "epMode: " + epMode);
+Debug.println(Level.FINE, "signalLength: " + signalLength);
+                in.reset();
+                ledis.skipBytes(v);
+            }
+
+            input = new Memory(LC3PLUS_MAX_BYTES);
+
+            init();
+        } catch (Throwable t) {
+            in.reset();
+            throw t;
+        }
+    }
 
     /** init decoder */
-    public void init() throws IOException {
-        int size = INSTANCE.lc3plus_dec_get_size(sampleRate, nChannels, plcMode);
+    private void init() throws IOException {
+        int size = INSTANCE.lc3plus_dec_get_size(sampleRate, channels, plcMode);
         Memory m = new Memory(size);
 Debug.println(Level.FINER, m.size() + ", " + m);
         decoder.setPointer(m);
 
-Debug.println(Level.FINE, "hrmode: " + hrmode);
-        int r = INSTANCE.lc3plus_dec_init(decoder, sampleRate, nChannels, plcMode, hrmode);
+Debug.println(Level.FINE, "hrMode: " + hrMode);
+        int r = INSTANCE.lc3plus_dec_init(decoder, sampleRate, channels, plcMode, hrMode);
         if (r != LC3PLUS_Error.LC3PLUS_OK) {
             throw new IOException("lc3plus_dec_init: " + ERROR_MESSAGES[r]);
         }
 
-        r = INSTANCE.lc3plus_dec_set_frame_dms(decoder, (int) frame_ms * 10);
+        r = INSTANCE.lc3plus_dec_set_frame_dms(decoder, (int) frameMs * 10);
         if (r != LC3PLUS_Error.LC3PLUS_OK) {
             throw new IOException("lc3plus_dec_set_frame_dms: " + ERROR_MESSAGES[r]);
         }
 
-        r = INSTANCE.lc3plus_dec_set_ep_enabled(decoder, epmode ? 1 : 0);
+        r = INSTANCE.lc3plus_dec_set_ep_enabled(decoder, epMode ? 1 : 0);
         if (r != LC3PLUS_Error.LC3PLUS_OK) {
             throw new IOException("lc3plus_dec_set_ep_enabled: " + ERROR_MESSAGES[r]);
         }
 
-        nSamples = INSTANCE.lc3plus_dec_get_output_samples(decoder);
-Debug.println(Level.FINE, "nSamples: " + nSamples);
+        samples = INSTANCE.lc3plus_dec_get_output_samples(decoder);
+Debug.println(Level.FINE, "samples: " + samples);
 
-        scratch_size = INSTANCE.lc3plus_dec_get_scratch_size(decoder);
-Debug.println(Level.FINE, "scratch_size: " + scratch_size);
-        scratch = new Memory(scratch_size);
-Debug.println(Level.FINE, "Native.POINTER_SIZE: " + Native.POINTER_SIZE);
+        scratchSize = INSTANCE.lc3plus_dec_get_scratch_size(decoder);
+Debug.println(Level.FINE, "scratchSize: " + scratchSize);
+        scratch = new Memory(scratchSize);
 
-        output16 = new Memory((long) nChannels * Native.POINTER_SIZE);
-        c16 = new Memory[nChannels];
-        for (int i = 0; i < nChannels; i++) {
-            c16[i] = new Memory(nSamples * Short.SIZE);
-            output16.setPointer((long) i * Native.POINTER_SIZE, c16[i]);
+Debug.println(Level.FINER, "Native.POINTER_SIZE: " + Native.POINTER_SIZE);
+        output16s = new Memory((long) channels * Native.POINTER_SIZE);
+        output16ch = new Memory[channels];
+        for (int i = 0; i < channels; i++) {
+            output16ch[i] = new Memory((long) samples * Short.BYTES);
+            output16s.setPointer((long) i * Native.POINTER_SIZE, output16ch[i]);
         }
     }
 
     /** decode */
-    public byte[] decode(int nBytes) throws IOException {
+    public byte[] decode(int inSize) throws IOException {
 
-Debug.println(Level.FINER, "decode: " + nBytes + ", " + bfi_ext);
-        int r = INSTANCE.lc3plus_dec16(decoder, bytes, nBytes, new NativeLong(Pointer.nativeValue(output16)), scratch, bfi_ext);
+Debug.println(Level.FINER, "decode: " + inSize + ", " + bfiExt);
+        int r = INSTANCE.lc3plus_dec16(decoder, input, inSize, new NativeLong(Pointer.nativeValue(output16s)), scratch, bfiExt);
         if (r != LC3PLUS_Error.LC3PLUS_OK) {
             throw new IOException("lc3plus_dec16: " + ERROR_MESSAGES[r]);
         }
-Debug.println(Level.FINEST, "here");
 
-        ByteBuffer bb = ByteBuffer.allocate(nSamples * nChannels * Short.SIZE).order(ByteOrder.nativeOrder());
+        ByteBuffer bb = ByteBuffer.allocate(samples * channels * Short.BYTES).order(ByteOrder.nativeOrder());
 
-        interleave(c16, bb.asShortBuffer(), nSamples, nChannels);
+        interleave16(output16ch, bb.asShortBuffer(), samples);
 
         return bb.array();
     }
 
     /** */
-    static void interleave(Memory[] in, ShortBuffer out, int n, int channels) {
+    private void interleave16(Memory[] in, ShortBuffer out, int n) {
         for (int ch = 0; ch < channels; ch++) {
             for (int i = 0; i < n; i++) {
-                out.put(i * channels + ch, in[ch].getShort((long) i * Short.SIZE));
+                out.put(i * channels + ch, in[ch].getShort((long) i * Short.BYTES));
             }
         }
     }
 
-    LittleEndianDataInputStream ledis;
-
-    /** check header */
-    public void header(InputStream in) throws IOException {
-        in.mark(20);
-        ledis = new LittleEndianDataInputStream(in);
-        int i = ledis.readUnsignedShort();
-        if (i != 0xcc1c) {
-            sampleRate = i * 100;
-            bitrate = ledis.readUnsignedShort() * 100;
-            nChannels = ledis.readUnsignedShort();
-Debug.println("sampleRate: " + sampleRate);
-Debug.println("bitrate: " + bitrate);
-Debug.println("nChannels: " + nChannels);
-            in.reset();
-            ledis.skipBytes(6);
-        } else {
-            int v = ledis.readUnsignedShort();
-            Debug.println("v: " + v);
-            assert v >= 18;
-            sampleRate = ledis.readUnsignedShort() * 100;
-            bitrate = ledis.readUnsignedShort() * 100;
-            nChannels = ledis.readUnsignedShort();
-            frame_ms = ledis.readUnsignedShort() / 100f;
-            epmode = ledis.readUnsignedShort() != 0;
-            signal_len = ledis.readInt();
-            hrmode = v > 18 ? ledis.readUnsignedShort() : 0;
-Debug.println("sampleRate: " + sampleRate);
-Debug.println("bitrate: " + bitrate);
-Debug.println("nChannels: " + nChannels);
-Debug.println("frame_ms: " + frame_ms);
-Debug.println("epmode: " + epmode);
-Debug.println("signal_len: " + signal_len);
-            in.reset();
-            ledis.skipBytes(v);
-        }
-    }
-
-    /** */
-    int bfi_ext;
     /* G192 bitstream writing/reading */
-    static final int G192_GOOD_FRAME = 0x6B21;
-    static final int G192_BAD_FRAME = 0x6B20;
-    static final int G192_REDUNDANCY_FRAME = 0x6B22;
-    static final int G192_ZERO = 0x007F;
-    static final int G192_ONE = 0x0081;
+    private static final int G192_GOOD_FRAME = 0x6B21;
+    private static final int G192_BAD_FRAME = 0x6B20;
+    private static final int G192_REDUNDANCY_FRAME = 0x6B22;
+    private static final int G192_ZERO = 0x007F;
+    private static final int G192_ONE = 0x0081;
 
     /** */
-    int read() throws IOException {
+    public int read() throws IOException {
         if (g192) {
             return read_g192();
         } else {
             int nbytes = ledis.readUnsignedShort();
-            for (int i = 0; i < nbytes && i < bytes.size(); i++) {
-                bytes.setByte(i, ledis.readByte());
+            for (int i = 0; i < nbytes && i < input.size(); i++) {
+                input.setByte(i, ledis.readByte());
             }
             return nbytes;
         }
     }
 
     /** */
-    int read_g192() throws IOException {
+    private int read_g192() throws IOException {
         int frameIndicator = ledis.readShort();
         int nbits = ledis.readUnsignedShort();
         int nbytes = nbits / 8;
 
-        for (int i = 0; i < nbytes && i < bytes.size(); i++) {
+        for (int i = 0; i < nbytes && i < input.size(); i++) {
             byte byte_ = 0;
             for (int j = 0; j < 8; j++) {
                 int currentBit = ledis.readShort();
@@ -210,15 +241,15 @@ Debug.println("signal_len: " + signal_len);
                     byte_ |= 1 << j;
                 }
             }
-            bytes.setByte(i, byte_);
+            input.setByte(i, byte_);
         }
         if (frameIndicator == G192_GOOD_FRAME) {
-            bfi_ext = 0;
+            bfiExt = 0;
         } else if (frameIndicator == G192_BAD_FRAME) {
             nbytes = 0;
-            bfi_ext = 1;
+            bfiExt = 1;
         } else if (frameIndicator == G192_REDUNDANCY_FRAME) {
-            bfi_ext = 3;
+            bfiExt = 3;
         }
 
         return nbytes;

@@ -21,10 +21,14 @@ import javax.sound.sampled.LineUnavailableException;
 import javax.sound.sampled.Mixer;
 import javax.sound.sampled.SourceDataLine;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import vavi.sound.SoundUtil;
 import vavi.util.Debug;
+import vavi.util.properties.annotation.Property;
+import vavi.util.properties.annotation.PropsEntity;
+
+import static vavix.util.DelayedWorker.later;
 
 
 /**
@@ -33,7 +37,28 @@ import vavi.util.Debug;
  * @author <a href="mailto:umjammer@gmail.com">Naohide Sano</a> (nsano)
  * @version 0.00 2023-02-05 nsano initial version <br>
  */
+@PropsEntity(url = "file:local.properties")
 class Test1 {
+
+    static boolean localPropertiesExists() {
+        return Files.exists(Paths.get("local.properties"));
+    }
+
+    @Property
+    String lc3file = "src/test/resources/test.lc3";
+
+    @BeforeEach
+    void setup() throws Exception {
+        if (localPropertiesExists()) {
+            PropsEntity.Util.bind(this);
+        }
+    }
+
+    static long time;
+
+    static {
+        time = System.getProperty("vavi.test", "").equals("ide") ? 1000 * 1000 : 10 * 1000;
+    }
 
     @Test
     void test0() throws Exception {
@@ -58,25 +83,22 @@ class Test1 {
     }
 
     @Test
-    @EnabledIfSystemProperty(named = "vavi.test", matches = "ide")
     void test1() throws Exception {
-        Lc3Plus lc3Plus = new Lc3Plus();
-        Path p = Paths.get("tmp", "hoshi_96k.lc3");
+        Path p = Paths.get(lc3file);
         InputStream is = new BufferedInputStream(Files.newInputStream(p));
-        lc3Plus.header(is);
-        lc3Plus.init();
+        Lc3Plus lc3Plus = new Lc3Plus(is);
 
-        AudioFormat af = new AudioFormat(lc3Plus.sampleRate, 16, lc3Plus.nChannels, true, false);
+        AudioFormat af = new AudioFormat(lc3Plus.getSampleRate(), 16, lc3Plus.getChannels(), true, false);
 Debug.println(af);
         SourceDataLine line = AudioSystem.getSourceDataLine(af);
         line.open();
         line.start();
-        SoundUtil.volume(line, .01f);
-        while (true) {
+        SoundUtil.volume(line, .2f);
+        while (!later(time).come()) {
             try {
                 int nBytes = lc3Plus.read();
                 byte[] decodedData = lc3Plus.decode(nBytes);
-Debug.println(decodedData.length);
+//Debug.println(decodedData.length);
                 line.write(decodedData, 0, decodedData.length);
             } catch (EOFException e) {
                 break;
