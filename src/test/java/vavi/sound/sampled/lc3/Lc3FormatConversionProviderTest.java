@@ -40,11 +40,13 @@ import static vavix.util.DelayedWorker.later;
 class Lc3FormatConversionProviderTest {
 
     static long time;
+    static double volume;
 
     static {
         System.setProperty("vavi.util.logging.VaviFormatter.extraClassMethod", "org\\.tritonus\\.share\\.TDebug#out");
 
         time = System.getProperty("vavi.test", "").equals("ide") ? 1000 * 1000 : 10 * 1000;
+        volume = Double.parseDouble(System.getProperty("vavi.test.volume",  "0.2"));
     }
 
     static final String inFile = "/test.lc3";
@@ -98,7 +100,7 @@ Debug.println("OUT: " + outAudioFormat);
         line.addLineListener(ev -> Debug.println(ev.getType()));
         line.start();
 
-        volume(line, .2d);
+        volume(line, volume);
 
         byte[] buf = new byte[1024];
         while (!later(time).come()) {
@@ -139,7 +141,7 @@ Debug.println("OUT: " + outAudioFormat);
         line.addLineListener(ev -> Debug.println(ev.getType()));
         line.start();
 
-        volume(line, .2d);
+        volume(line, volume);
 
         byte[] buf = new byte[1024];
         while (!later(time).come()) {

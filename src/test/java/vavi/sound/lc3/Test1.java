@@ -55,9 +55,11 @@ class Test1 {
     }
 
     static long time;
+    static double volume;
 
     static {
         time = System.getProperty("vavi.test", "").equals("ide") ? 1000 * 1000 : 10 * 1000;
+        volume = Double.parseDouble(System.getProperty("vavi.test.volume",  "0.2"));
     }
 
     @Test
@@ -71,7 +73,7 @@ class Test1 {
                 try {
                     m.open();
                     if (li instanceof DataLine.Info) {
-                        final DataLine.Info dataLineInfo = (DataLine.Info) li;
+                        DataLine.Info dataLineInfo = (DataLine.Info) li;
                         Arrays.stream(dataLineInfo.getFormats())
                                 .forEach(format -> System.out.println(" " + format.toString()));
                     }
@@ -93,7 +95,7 @@ Debug.println(af);
         SourceDataLine line = AudioSystem.getSourceDataLine(af);
         line.open();
         line.start();
-        SoundUtil.volume(line, .2f);
+        SoundUtil.volume(line, volume);
         while (!later(time).come()) {
             try {
                 int nBytes = lc3Plus.read();
