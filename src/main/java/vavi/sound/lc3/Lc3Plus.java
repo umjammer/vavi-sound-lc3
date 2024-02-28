@@ -32,7 +32,7 @@ import static vavi.sound.lc3.jna.Lc3Library.LC3PLUS_MAX_BYTES;
  * @author <a href="mailto:umjammer@gmail.com">Naohide Sano</a> (nsano)
  * @version 0.00 2023-02-05 nsano initial version <br>
  */
-public class Lc3Plus {
+public class Lc3Plus implements AutoCloseable {
 
     /** the decoder structure */
     private PointerByReference decoder = new PointerByReference();
@@ -89,9 +89,13 @@ public class Lc3Plus {
         return channels;
     }
 
-    /** */
-    public InputStream getInputStream() {
-        return ledis;
+    @Override
+    public void close() throws IOException {
+        ledis.close();
+
+        for (int i = 0; i < channels; i++) {
+            output16ch[i].close();
+        }
     }
 
     /**
