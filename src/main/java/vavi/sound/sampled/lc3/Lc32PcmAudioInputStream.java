@@ -46,7 +46,7 @@ class Lc32PcmAudioInputStream extends AudioInputStream {
             this.lc3Plus = lc3Plus;
         }
 
-        /** */
+        @Override
         public void initialize(OutputStream out) throws IOException {
             if (this.out != null) {
                 throw new IOException("Already initialized");
@@ -55,13 +55,7 @@ class Lc32PcmAudioInputStream extends AudioInputStream {
             }
         }
 
-        /** */
-        private byte[] pcmBuffer = new byte[0xffff];
-
-        /** 24kb buffer = 4096 frames = 1 opus sample (we support max 24bps) */
-        private int[] pDestBuffer = new int[1024 * 24 * 3];
-
-        /** */
+        @Override
         public void execute() throws IOException {
             if (out == null) {
                 throw new IOException("Not yet initialized");
@@ -76,9 +70,9 @@ class Lc32PcmAudioInputStream extends AudioInputStream {
             }
         }
 
-        /** */
+        @Override
         public void finish() throws IOException {
-            lc3Plus.getInputStream().close();
+            lc3Plus.close();
         }
     }
 }
