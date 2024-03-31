@@ -102,6 +102,7 @@ public class Lc3Plus implements AutoCloseable {
      * Creates a decoder.
      *
      * @param in must be mark supported
+     * @throws IllegalArgumentException maybe not lc3
      */
     public Lc3Plus(InputStream in) throws IOException {
         in.mark(20);
@@ -141,9 +142,11 @@ Debug.println(Level.FINE, "signalLength: " + signalLength);
             input = new Memory(LC3PLUS_MAX_BYTES);
 
             init();
-        } catch (Throwable t) {
+        } catch (IOException e) {
+            throw e;
+        } catch (Exception t) {
             in.reset();
-            throw t;
+            throw new IllegalArgumentException(t);
         }
     }
 

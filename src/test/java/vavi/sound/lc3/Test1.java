@@ -72,8 +72,7 @@ class Test1 {
             for (Line.Info li : lines){
                 try {
                     m.open();
-                    if (li instanceof DataLine.Info) {
-                        DataLine.Info dataLineInfo = (DataLine.Info) li;
+                    if (li instanceof DataLine.Info dataLineInfo) {
                         Arrays.stream(dataLineInfo.getFormats())
                                 .forEach(format -> System.out.println(" " + format.toString()));
                     }
