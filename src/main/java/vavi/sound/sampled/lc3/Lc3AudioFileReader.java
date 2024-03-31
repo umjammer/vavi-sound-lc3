@@ -70,12 +70,15 @@ Debug.println(Level.FINE, "enter available: " + bitStream.available());
         Lc3Plus lc3Plus;
         try {
             lc3Plus = new Lc3Plus(bitStream);
-        } catch (IOException e) {
-Debug.println(Level.FINE, "error exit available: " + bitStream.available() + ", " + e.getMessage());
+        } catch (IllegalArgumentException e) {
+Debug.println(Level.FINER, "error exit available: " + bitStream.available() + ", " + e.getMessage());
+Debug.printStackTrace(Level.FINEST, e);
             throw (UnsupportedAudioFileException) new UnsupportedAudioFileException(e.getMessage()).initCause(e);
         }
         // TODO AudioSystem.NOT_SPECIFIED cause IllegalArgumentException at Clip#open()
-        AudioFormat format = new AudioFormat(Lc3Encoding.LC3, lc3Plus.getSampleRate(), lc3Plus.getSampleSizeInBit(), lc3Plus.getChannels(), AudioSystem.NOT_SPECIFIED, AudioSystem.NOT_SPECIFIED, true, new HashMap<String, Object>() {{ put("lc3Plus", lc3Plus); }});
+        AudioFormat format = new AudioFormat(Lc3Encoding.LC3, lc3Plus.getSampleRate(), lc3Plus.getSampleSizeInBit(), lc3Plus.getChannels(), AudioSystem.NOT_SPECIFIED, AudioSystem.NOT_SPECIFIED, true, new HashMap<>() {{
+            put("lc3Plus", lc3Plus);
+        }});
         return new AudioFileFormat(Lc3FileFormatType.LC3, format, AudioSystem.NOT_SPECIFIED);
     }
 

@@ -295,7 +295,7 @@ public interface Lc3Library extends Library {
      * Original signature : <code>LC3PLUS_Error lc3plus_enc_init(LC3PLUS_Enc*, int, int)</code><br>
      * <i>native declaration : lc3.h:161</i><br>
      *
-     * @deprecated use the safer method {@link #lc3plus_enc_init(com.sun.jna.ptr.PointerByReference, int, int)} instead
+     * @deprecated use the safer method {@link #lc3plus_enc_init(com.sun.jna.ptr.PointerByReference, int, int, int)} instead
      */
     @Deprecated
     int lc3plus_enc_init(Pointer encoder, int samplerate, int channels, int hrmode);
@@ -733,7 +733,7 @@ public interface Lc3Library extends Library {
      * Original signature : <code>LC3PLUS_Error lc3plus_dec_init(LC3PLUS_Dec*, int, int, LC3PLUS_PlcMode)</code><br>
      * <i>native declaration : lc3.h:336</i><br>
      *
-     * @deprecated use the safer method {@link #lc3plus_dec_init(com.sun.jna.ptr.PointerByReference, int, int, int)} instead
+     * @deprecated use the safer method {@link #lc3plus_dec_init(com.sun.jna.ptr.PointerByReference, int, int, int, int)} instead
      */
     @Deprecated
     int lc3plus_dec_init(Pointer decoder, int samplerate, int channels, int plc_mode, int hrmode);
