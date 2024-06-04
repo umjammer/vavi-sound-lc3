@@ -76,5 +76,3 @@ class Lc32PcmAudioInputStream extends AudioInputStream {
         }
     }
 }
-
-/* */

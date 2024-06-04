@@ -29,5 +29,3 @@ public class Lc3Encoding extends AudioFormat.Encoding {
         super(name);
     }
 }
-
-/* */

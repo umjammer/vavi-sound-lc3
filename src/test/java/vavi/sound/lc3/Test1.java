@@ -109,5 +109,3 @@ Debug.println(af);
         line.close();
     }
 }
-
-/* */

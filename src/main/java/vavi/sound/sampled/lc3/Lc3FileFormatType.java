@@ -32,5 +32,3 @@ public class Lc3FileFormatType extends AudioFileFormat.Type {
         super(name, extension);
     }
 }
-
-/* */

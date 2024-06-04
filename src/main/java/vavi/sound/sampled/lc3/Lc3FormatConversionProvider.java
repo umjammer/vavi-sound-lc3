@@ -116,5 +116,3 @@ public class Lc3FormatConversionProvider extends FormatConversionProvider {
         }
     }
 }
-
-/* */
