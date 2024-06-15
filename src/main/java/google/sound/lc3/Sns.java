@@ -19,23 +19,23 @@ package google.sound.lc3;
 import java.util.Arrays;
 import java.util.Map;
 
-import google.sound.lc3.Common.Duration;
-import google.sound.lc3.Common.SRate;
+import google.sound.lc3.Lc3.Duration;
+import google.sound.lc3.Lc3.SRate;
 
-import static google.sound.lc3.Common.Duration._10M;
-import static google.sound.lc3.Common.Duration._7M5;
-import static google.sound.lc3.Common.SRate._16K;
-import static google.sound.lc3.Common.SRate._24K;
-import static google.sound.lc3.Common.SRate._32K;
-import static google.sound.lc3.Common.SRate._48K;
-import static google.sound.lc3.Common.SRate._48K_HR;
-import static google.sound.lc3.Common.SRate._8K;
-import static google.sound.lc3.Common.SRate._96K_HR;
-import static google.sound.lc3.Common.isHR;
 import static google.sound.lc3.Energy.LC3_MAX_BANDS;
 import static google.sound.lc3.Energy.lc3_band_lim;
 import static google.sound.lc3.Energy.lc3_num_bands;
 import static google.sound.lc3.FastMath.log2f;
+import static google.sound.lc3.Lc3.Duration._10M;
+import static google.sound.lc3.Lc3.Duration._7M5;
+import static google.sound.lc3.Lc3.SRate._16K;
+import static google.sound.lc3.Lc3.SRate._24K;
+import static google.sound.lc3.Lc3.SRate._32K;
+import static google.sound.lc3.Lc3.SRate._48K;
+import static google.sound.lc3.Lc3.SRate._48K_HR;
+import static google.sound.lc3.Lc3.SRate._8K;
+import static google.sound.lc3.Lc3.SRate._96K_HR;
+import static google.sound.lc3.Lc3.isHR;
 
 
 /**
@@ -330,49 +330,49 @@ class Sns {
         float[] ge = ge_table.get(sr);
 
         float e0 = e[0], e1 = e[0], e2;
-        float e_sum = 0;
+        float eSum = 0;
 
         for (int i = 0; i < LC3_MAX_BANDS - 1; ) {
             e[i] = (e0 * 0.25f + e1 * 0.5f + (e2 = e[i + 1]) * 0.25f) * ge[i];
-            e_sum += e[i++];
+            eSum += e[i++];
 
             e[i] = (e1 * 0.25f + e2 * 0.5f + (e0 = e[i + 1]) * 0.25f) * ge[i];
-            e_sum += e[i++];
+            eSum += e[i++];
 
             e[i] = (e2 * 0.25f + e0 * 0.5f + (e1 = e[i + 1]) * 0.25f) * ge[i];
-            e_sum += e[i++];
+            eSum += e[i++];
         }
 
         e[LC3_MAX_BANDS - 1] = (e0 * 0.25f + e1 * 0.75f) * ge[LC3_MAX_BANDS - 1];
-        e_sum += e[LC3_MAX_BANDS - 1];
+        eSum += e[LC3_MAX_BANDS - 1];
 
-        float noise_floor = Math.max(e_sum * (1e-4f / 64), 0x1p-32f);
+        float noise_floor = Math.max(eSum * (1e-4f / 64), 0x1p-32f);
 
         for (int i = 0; i < LC3_MAX_BANDS; i++)
             e[i] = log2f(Math.max(e[i], noise_floor)) * 0.5f;
 
         // Grouping & scaling
 
-        float scf_sum;
+        float scfSum;
 
         scf[0] = (e[0] + e[4]) * 1.f / 12 + (e[0] + e[3]) * 2.f / 12 + (e[1] + e[2]) * 3.f / 12;
-        scf_sum = scf[0];
+        scfSum = scf[0];
 
         for (int i = 1; i < 15; i++) {
             scf[i] = (e[4 * i - 1] + e[4 * i + 4]) * 1.f / 12 +
                     (e[4 * i] + e[4 * i + 3]) * 2.f / 12 + (e[4 * i + 1] + e[4 * i + 2]) * 3.f / 12;
-            scf_sum += scf[i];
+            scfSum += scf[i];
         }
 
         scf[15] = (e[59] + e[63]) * 1.f / 12 + (e[60] + e[63]) * 2.f / 12 + (e[61] + e[62]) * 3.f / 12;
-        scf_sum += scf[15];
+        scfSum += scf[15];
 
         float cf = isHR(sr) ? 0.6f : 0.85f;
         if (isHR(sr) && 8 * nBytes > (dt.ordinal() < _10M.ordinal() ? 1150 * (int) (1 + dt.ordinal()) : 4400))
             cf *= dt.ordinal() < _10M.ordinal() ? 0.25f : 0.35f;
 
         for (int i = 0; i < 16; i++)
-            scf[i] = cf * (scf[i] - scf_sum * 1.f / 16);
+            scf[i] = cf * (scf[i] - scfSum * 1.f / 16);
 
         // Attack handling
 
@@ -383,7 +383,7 @@ class Sns {
 
         scf[0] = (sn += s3) * 1.f / 3;
         scf[1] = (sn += s4) * 1.f / 4;
-        scf_sum = scf[0] + scf[1];
+        scfSum = scf[0] + scf[1];
 
         for (int i = 2; i < 14; i++, sn -= s0) {
             s0 = s1;
@@ -392,27 +392,26 @@ class Sns {
             s3 = s4;
             s4 = scf[i + 2];
             scf[i] = (sn += s4) * 1.f / 5;
-            scf_sum += scf[i];
+            scfSum += scf[i];
         }
 
         scf[14] = (sn) * 1.f / 4;
         scf[15] = (sn -= s1) * 1.f / 3;
-        scf_sum += scf[14] + scf[15];
+        scfSum += scf[14] + scf[15];
 
         for (int i = 0; i < 16; i++)
-            scf[i] = (dt == _7M5 ? 0.3f : 0.5f) * (scf[i] - scf_sum * 1.f / 16);
+            scf[i] = (dt == _7M5 ? 0.3f : 0.5f) * (scf[i] - scfSum * 1.f / 16);
     }
 
     /**
      * Codebooks
      *
      * @param scf Input 16 scale factors
-     * @param sns Output the high and low frequency codebooks index
      */
-    private static void resolve_codebooks(float[] scf, Sns sns) {
+    private void resolve_codebooks(float[] scf) {
         float dlfcb_max = 0, dhfcb_max = 0;
-        sns.lfcb = 0;
-        sns.hfcb = 0;
+        this.lfcb = 0;
+        this.hfcb = 0;
 
         for (int icb = 0; icb < 32; icb++) {
             float[] lfcb = lc3_sns_lfcb[icb];
@@ -424,10 +423,10 @@ class Sns {
                 dhfcb += (scf[8 + i] - hfcb[i]) * (scf[8 + i] - hfcb[i]);
             }
 
-            if (icb == 0 || dlfcb < dlfcb_max) sns.lfcb = icb;
+            if (icb == 0 || dlfcb < dlfcb_max) this.lfcb = icb;
             dlfcb_max = dlfcb;
 
-            if (icb == 0 || dhfcb < dhfcb_max) sns.hfcb = icb;
+            if (icb == 0 || dhfcb < dhfcb_max) this.hfcb = icb;
             dhfcb_max = dhfcb;
         }
     }
@@ -489,9 +488,8 @@ class Sns {
      * @param hfcbIndex Codebooks index
      * @param c         Output 4 pulse configurations candidates
      * @param cn        Output 4 pulse configurations normalized
-     * @param sns       Output selected shape/gain indexes
      */
-    private static void quantize(float[] scf, int lfcbIndex, int hfcbIndex, int[][] c, float[][] cn, Sns sns) {
+    private void quantize(float[] scf, int lfcbIndex, int hfcbIndex, int[][] c, float[][] cn) {
 
         // Residual
 
@@ -582,7 +580,7 @@ class Sns {
         // Search the Mean Square Error, within (shape, gain) combinations
 
         float mseMin = Float.NEGATIVE_INFINITY;
-        sns.shape = sns.gain = 0;
+        this.shape = this.gain = 0;
 
         for (int ic = 0; ic < 4; ic++) {
             lc3_sns_vq_gains cGains = _lc3_sns_vq_gains[ic];
@@ -603,8 +601,8 @@ class Sns {
             }
 
             if (cmseMin < mseMin) {
-                sns.shape = ic;
-                sns.gain = cGainIndex;
+                this.shape = ic;
+                this.gain = cGainIndex;
                 mseMin = cmseMin;
             }
         }
@@ -613,16 +611,16 @@ class Sns {
     /**
      * Unquantization of codebooks residual
      *
-     * @param lfcb_idx Low  frequency codebooks index
-     * @param hfcb_idx high frequency codebooks index
-     * @param c        Table of normalized pulse configuration
-     * @param shape    Selected shape
-     * @param gain     gain indexes
-     * @param scf      Return unquantized scale factors
+     * @param lfcbIndex Low  frequency codebooks index
+     * @param hfcbIndex high frequency codebooks index
+     * @param c         Table of normalized pulse configuration
+     * @param shape     Selected shape
+     * @param gain      gain indexes
+     * @param scf       Return unquantized scale factors
      */
-    private static void unquantize(int lfcb_idx, int hfcb_idx, float[] c, int shape, int gain, float[] scf) {
-        float[] lfcb = lc3_sns_lfcb[lfcb_idx];
-        float[] hfcb = lc3_sns_hfcb[hfcb_idx];
+    private static void unquantize(int lfcbIndex, int hfcbIndex, float[] c, int shape, int gain, float[] scf) {
+        float[] lfcb = lc3_sns_lfcb[lfcbIndex];
+        float[] hfcb = lc3_sns_hfcb[hfcbIndex];
         float g = _lc3_sns_vq_gains[shape].v[gain];
 
         dct16_inverse(c, scf);
@@ -642,14 +640,14 @@ class Sns {
      * @param idx Return enumeration set
      * @param ls  Return enumeration set
      */
-    private static void enum_mvpq(int[] c, int cP, int n, int[] idx, boolean[] ls) {
+    private static void enum_mvpq(int[] c, int cp, int n, int[] idx, boolean[] ls) {
         int ci, i;
 
         // Scan for 1st significant coeff
 
         i = 0;
-        cP += n;
-        while ((ci = c[--cP]) == 0 && i < 15) {
+        cp += n;
+        while ((ci = c[--cp]) == 0 && i < 15) {
             i++;
         }
 
@@ -662,7 +660,7 @@ class Sns {
 
         for (i++; i < n; i++, j += Math.abs(ci)) {
 
-            if ((ci = c[--cP]) != 0) {
+            if ((ci = c[--cp]) != 0) {
                 idx[0] = (idx[0] << 1) | (ls[0] ? 1 : 0);
                 ls[0] = ci < 0;
             }
@@ -676,11 +674,11 @@ class Sns {
      *
      * @param idx     Enumeration set
      * @param ls      Enumeration set
-     * @param npulses Number of pulses in the set
+     * @param nPulses Number of pulses in the set
      * @param c       Table of pulses configuration
      * @param n       and length
      */
-    private static void deenum_mvpq(int idx, boolean ls, int npulses, int[] c, int cP, int n) {
+    private static void deenum_mvpq(int idx, boolean ls, int nPulses, int[] c, int cp, int n) {
         int i;
 
         // Scan for coefficients
@@ -689,11 +687,11 @@ class Sns {
 
             int ci = 0;
 
-            for (ci = 0; idx < lc3_sns_mpvq_offsets[i][npulses - ci]; ci++) ;
-            idx -= lc3_sns_mpvq_offsets[i][npulses - ci];
+            while (idx < lc3_sns_mpvq_offsets[i][nPulses - ci]) ci++;
+            idx -= lc3_sns_mpvq_offsets[i][nPulses - ci];
 
-            c[cP++] = ls ? -ci : ci;
-            npulses -= ci;
+            c[cp++] = ls ? -ci : ci;
+            nPulses -= ci;
             if (ci > 0) {
                 ls = (idx & 1) != 0;
                 idx >>= 1;
@@ -702,11 +700,11 @@ class Sns {
 
         // Set last significant
 
-        int ci = npulses;
+        int ci = nPulses;
 
-        if (i-- >= 0) c[cP++] = ls ? -ci : ci;
+        if (i-- >= 0) c[cp++] = ls ? -ci : ci;
 
-        while (i-- >= 0) c[cP++] = 0;
+        while (i-- >= 0) c[cp++] = 0;
     }
 
     /**
@@ -730,7 +728,7 @@ class Sns {
         }
     }
 
-    private static final int[] npulses = new int[] {10, 10, 8, 6};
+    private static final int[] nPulses = new int[] {10, 10, 8, 6};
 
     /**
      * SNS Deenumeration of PVQ configuration
@@ -744,7 +742,7 @@ class Sns {
      */
     private static void deenumerate(int shape, int idx_a, boolean ls_a, int idx_b, boolean ls_b, int[] c) {
 
-        deenum_mvpq(idx_a, ls_a, npulses[shape], c, 0, shape < 2 ? 10 : 16);
+        deenum_mvpq(idx_a, ls_a, nPulses[shape], c, 0, shape < 2 ? 10 : 16);
 
         if (shape == 0) deenum_mvpq(idx_b, ls_b, 1, c, 10, 6);
         else if (shape == 1) Arrays.fill(c, 10, 10 + 6, 0);
@@ -766,12 +764,11 @@ class Sns {
      * @param x     Spectral coefficients
      * @param y     Return shapped coefficients
      */
-    private static void spectral_shaping(Duration dt, SRate sr, float[] scf_q, boolean inv, float[] x, float[] y) {
+    private static void spectral_shaping(Duration dt, SRate sr, float[] scf_q, boolean inv, float[] x, int xp, float[] y, int yp) {
         // Interpolate scale factors
 
         float[] scf = new float[LC3_MAX_BANDS];
         float s0 = inv ? -scf_q[0] : scf_q[0];
-        ;
         float s1 = s0;
 
         scf[0] = scf[1] = s1;
@@ -807,14 +804,14 @@ class Sns {
             float g_sns = (float) Math.exp(-scf[ib]);
 
             for (; i < lim[ib + 1]; i++)
-                y[i] = x[i] * g_sns;
+                y[yp + i] = x[xp + i] * g_sns;
         }
     }
 
-    int lfcb, hfcb;
-    int shape, gain;
-    int idx_a, idx_b;
-    boolean ls_a, ls_b;
+    private int lfcb, hfcb;
+    private int shape, gain;
+    private int idx_a, idx_b;
+    private boolean ls_a, ls_b;
 
     //
     // Encoding
@@ -827,14 +824,13 @@ class Sns {
      *
      * @param dt     Duration of the frame
      * @param sr     sampleRate of the frame
-     * @param nbytes Size in bytes of the frame
+     * @param nBytes Size in bytes of the frame
      * @param eb     Energy estimation per bands, and count of bands
      * @param att    1: Attack detected  0: Otherwise
-     * @param data   Return bitstream data
      * @param x      Spectral coefficients
      * @param y      Return shapped coefficients
      */
-    static void lc3_sns_analyze(Duration dt, SRate sr, int nbytes, float[] eb, boolean att, Sns data, float[] x, float[] y) {
+    void lc3_sns_analyze(Duration dt, SRate sr, int nBytes, float[] eb, boolean att, float[] x, int xp, float[] y, int yp) {
 
         // Processing steps :
         // - Determine 16 scale factors from bands energy estimation
@@ -847,17 +843,17 @@ class Sns {
         float[][] cn = new float[4][16];
         int[][] c = new int[4][16];
 
-        compute_scale_factors(dt, sr, nbytes, eb, att, scf);
+        compute_scale_factors(dt, sr, nBytes, eb, att, scf);
 
-        resolve_codebooks(scf, data);
+        resolve_codebooks(scf);
 
-        quantize(scf, data.lfcb, data.hfcb, c, cn, data);
+        quantize(scf, this.lfcb, this.hfcb, c, cn);
 
-        unquantize(data.lfcb, data.hfcb, cn[data.shape], data.shape, data.gain, scf);
+        unquantize(this.lfcb, this.hfcb, cn[this.shape], this.shape, this.gain, scf);
 
-        enumerate(data.shape, c[data.shape], data);
+        enumerate(this.shape, c[this.shape], this);
 
-        spectral_shaping(dt, sr, scf, false, x, y);
+        spectral_shaping(dt, sr, scf, false, x, xp, y, yp);
     }
 
     /**
@@ -873,41 +869,40 @@ class Sns {
      * Put bitstream data
      *
      * @param bits Bitstream context
-     * @param data Bitstream data
      */
-    static void lc3_sns_put_data(Bits bits, final Sns data) {
+    void lc3_sns_put_data(Bits bits) {
 
         // Codebooks
 
-        bits.lc3_put_bits(data.lfcb, 5);
-        bits.lc3_put_bits(data.hfcb, 5);
+        bits.lc3_put_bits(this.lfcb, 5);
+        bits.lc3_put_bits(this.hfcb, 5);
 
         // Shape, gain and vectors
         // Write MSB bit of shape index, next LSB bits of shape and gain,
         // and MVPQ vectors indexes are muxed */
 
-        int shape_msb = data.shape >> 1;
+        int shape_msb = this.shape >> 1;
         bits.lc3_put_bit(shape_msb);
 
         if (shape_msb == 0) {
             final int size_a = 2390004;
-            int submode = data.shape & 1;
+            int submode = this.shape & 1;
 
-            int mux_high = submode == 0 ? 2 * (data.idx_b + 1) + (data.ls_b ? 1 : 0) : data.gain & 1;
-            int mux_code = mux_high * size_a + data.idx_a;
+            int mux_high = submode == 0 ? 2 * (this.idx_b + 1) + (this.ls_b ? 1 : 0) : this.gain & 1;
+            int mux_code = mux_high * size_a + this.idx_a;
 
-            bits.lc3_put_bits(data.gain >> submode, 1);
-            bits.lc3_put_bits(data.ls_a ? 1 : 0, 1);
+            bits.lc3_put_bits(this.gain >> submode, 1);
+            bits.lc3_put_bits(this.ls_a ? 1 : 0, 1);
             bits.lc3_put_bits(mux_code, 25);
 
         } else {
             final int size_a = 15158272;
-            int submode = data.shape & 1;
+            int submode = this.shape & 1;
 
-            int mux_code = submode == 0 ? data.idx_a : size_a + 2 * data.idx_a + (data.gain & 1);
+            int mux_code = submode == 0 ? this.idx_a : size_a + 2 * this.idx_a + (this.gain & 1);
 
-            bits.lc3_put_bits(data.gain >> submode, 2);
-            bits.lc3_put_bits(data.ls_a ? 1 : 0, 1);
+            bits.lc3_put_bits(this.gain >> submode, 2);
+            bits.lc3_put_bits(this.ls_a ? 1 : 0, 1);
             bits.lc3_put_bits(mux_code, 24);
         }
     }
@@ -920,59 +915,53 @@ class Sns {
      * Get bitstream data
      *
      * @param bits Bitstream context
-     * @param data Return SNS data
-     * @return 0: Ok  -1: Invalid SNS data
      */
-    static int lc3_sns_get_data(Bits bits, Sns data) {
+    Sns(Bits bits) { // lc3_sns_get_data
 
         // Codebooks
 
-        data = new Sns() {{
-            lfcb = bits.lc3_get_bits(5);
-            hfcb = bits.lc3_get_bits(5);
-        }};
+        this.lfcb = bits.lc3_get_bits(5);
+        this.hfcb = bits.lc3_get_bits(5);
 
         // Shape, gain and vectors
 
         int shape_msb = bits.lc3_get_bit();
-        data.gain = bits.lc3_get_bits(1 + shape_msb);
-        data.ls_a = bits.lc3_get_bit() != 0;
+        this.gain = bits.lc3_get_bits(1 + shape_msb);
+        this.ls_a = bits.lc3_get_bit() != 0;
 
-        int mux_code = bits.lc3_get_bits(25 - shape_msb);
+        int muxCode = bits.lc3_get_bits(25 - shape_msb);
 
         if (shape_msb == 0) {
             final int size_a = 2390004;
 
-            if (mux_code >= size_a * 14) return -1;
+            if (muxCode >= size_a * 14) throw new IllegalStateException("when size_a = 2390004");
 
-            data.idx_a = mux_code % size_a;
-            mux_code = mux_code / size_a;
+            this.idx_a = muxCode % size_a;
+            muxCode = muxCode / size_a;
 
-            data.shape = (mux_code < 2) ? 1 : 0;
+            this.shape = (muxCode < 2) ? 1 : 0;
 
-            if (data.shape == 0) {
-                data.idx_b = (mux_code - 2) / 2;
-                data.ls_b = ((mux_code - 2) % 2) != 0;
+            if (this.shape == 0) {
+                this.idx_b = (muxCode - 2) / 2;
+                this.ls_b = ((muxCode - 2) % 2) != 0;
             } else {
-                data.gain = (data.gain << 1) + (mux_code % 2);
+                this.gain = (this.gain << 1) + (muxCode % 2);
             }
 
         } else {
             final int size_a = 15158272;
 
-            if (mux_code >= size_a + 1549824) return -1;
+            if (muxCode >= size_a + 1549824) throw new IllegalStateException("when size_a = 15158272");
 
-            data.shape = 2 + ((mux_code >= size_a) ? 1 : 0);
-            if (data.shape == 2) {
-                data.idx_a = mux_code;
+            this.shape = 2 + ((muxCode >= size_a) ? 1 : 0);
+            if (this.shape == 2) {
+                this.idx_a = muxCode;
             } else {
-                mux_code -= size_a;
-                data.idx_a = mux_code / 2;
-                data.gain = (data.gain << 1) + (mux_code % 2);
+                muxCode -= size_a;
+                this.idx_a = muxCode / 2;
+                this.gain = (this.gain << 1) + (muxCode % 2);
             }
         }
-
-        return 0;
     }
 
     /**
@@ -982,21 +971,20 @@ class Sns {
      *
      * @param dt   Duration and sampleRate of the frame
      * @param sr   Duration and sampleRate of the frame
-     * @param data Bitstream data
      * @param x    Spectral coefficients
      * @param y    Return shapped coefficients
      */
-    static void lc3_sns_synthesize(Duration dt, SRate sr, Sns data, float[] x, float[] y) {
+    void lc3_sns_synthesize(Duration dt, SRate sr, float[] x, int xp, float[] y, int yp) {
         float[] scf = new float[16], cn = new float[16];
         int[] c = new int[16];
 
-        deenumerate(data.shape, data.idx_a, data.ls_a, data.idx_b, data.ls_b, c);
+        deenumerate(this.shape, this.idx_a, this.ls_a, this.idx_b, this.ls_b, c);
 
         normalize(c, cn);
 
-        unquantize(data.lfcb, data.hfcb, cn, data.shape, data.gain, scf);
+        unquantize(this.lfcb, this.hfcb, cn, this.shape, this.gain, scf);
 
-        spectral_shaping(dt, sr, scf, true, x, y);
+        spectral_shaping(dt, sr, scf, true, x, xp, y, yp);
     }
 
     private static final float[][] lc3_sns_lfcb = {

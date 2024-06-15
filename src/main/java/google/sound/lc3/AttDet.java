@@ -20,13 +20,13 @@ package google.sound.lc3;
 
 import java.util.Map;
 
-import google.sound.lc3.Common.Duration;
-import google.sound.lc3.Common.SRate;
+import google.sound.lc3.Lc3.Duration;
+import google.sound.lc3.Lc3.SRate;
 
-import static google.sound.lc3.Common.Duration._10M;
-import static google.sound.lc3.Common.Duration._7M5;
-import static google.sound.lc3.Common.isHR;
-import static google.sound.lc3.Common.SRate._32K;
+import static google.sound.lc3.Lc3.Duration._10M;
+import static google.sound.lc3.Lc3.Duration._7M5;
+import static google.sound.lc3.Lc3.isHR;
+import static google.sound.lc3.Lc3.SRate._32K;
 
 
 class AttDet {
@@ -40,7 +40,7 @@ class AttDet {
         int p_att;
     }
 
-    static final Map<Integer, int[/*NUM_SRATE - _32K*/][/*2*/]> nBytesRanges = Map.of(
+    private static final Map<Integer, int[/*NUM_SRATE - _32K*/][/*2*/]> nBytesRanges = Map.of(
             _7M5.ordinal() - _7M5.ordinal(), new int[][] {{61, 149}, {75, 149}},
             _10M.ordinal() - _7M5.ordinal(), new int[][] {{81, Integer.MAX_VALUE}, {100, Integer.MAX_VALUE}}
     );
@@ -56,7 +56,7 @@ class AttDet {
      * @return 1: Attack detected  0: Otherwise
      */
     static boolean lc3_attdet_run(Duration dt, SRate sr,
-                                  int nBytes, Analysis attDet, short[] x) {
+                                  int nBytes, Analysis attDet, short[] x, int xp) {
 
         // Check enabling
 
@@ -70,27 +70,26 @@ class AttDet {
         int nBlk = 4 - (dt == _7M5 ? 1 : 0);
         int[] e = new int[4];
 
-        int xP = 0;
         for (int i = 0; i < nBlk; i++) {
             e[i] = 0;
 
             if (sr == _32K) {
-                int xn2 = (x[xP + -4] + x[xP + -3]) >> 1;
-                int xn1 = (x[xP + -2] + x[xP + -1]) >> 1;
+                int xn2 = (x[xp + -4] + x[xp + -3]) >> 1;
+                int xn1 = (x[xp + -2] + x[xp + -1]) >> 1;
                 int xn, xf;
 
-                for (int j = 0; j < 40; j++, xP += 2, xn2 = xn1, xn1 = xn) {
-                    xn = (x[xP + 0] + x[xP + 1]) >> 1;
+                for (int j = 0; j < 40; j++, xp += 2, xn2 = xn1, xn1 = xn) {
+                    xn = (x[xp + 0] + x[xp + 1]) >> 1;
                     xf = (3 * xn - 4 * xn1 + 1 * xn2) >> 3;
                     e[i] += (xf * xf) >> 5;
                 }
             } else {
-                int xn2 = (short) ((x[xP + -6] + x[xP + -5] + x[xP + -4]) >> 2);
-                int xn1 = (short) ((x[xP + -3] + x[xP + -2] + x[xP + -1]) >> 2);
+                int xn2 = (short) ((x[xp + -6] + x[xp + -5] + x[xp + -4]) >> 2);
+                int xn1 = (short) ((x[xp + -3] + x[xp + -2] + x[xp + -1]) >> 2);
                 int xn, xf;
 
-                for (int j = 0; j < 40; j++, xP += 3, xn2 = xn1, xn1 = xn) {
-                    xn = (x[xP + 0] + x[xP + 1] + x[xP + 2]) >> 2;
+                for (int j = 0; j < 40; j++, xp += 3, xn2 = xn1, xn1 = xn) {
+                    xn = (x[xp + 0] + x[xp + 1] + x[xp + 2]) >> 2;
                     xf = (3 * xn - 4 * xn1 + 1 * xn2) >> 3;
                     e[i] += (xf * xf) >> 5;
                 }

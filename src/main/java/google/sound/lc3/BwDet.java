@@ -18,15 +18,15 @@ package google.sound.lc3;
 
 import java.util.Map;
 
-import google.sound.lc3.Common.BandWidth;
-import google.sound.lc3.Common.Duration;
-import google.sound.lc3.Common.SRate;
+import google.sound.lc3.Lc3.BandWidth;
+import google.sound.lc3.Lc3.Duration;
+import google.sound.lc3.Lc3.SRate;
 
-import static google.sound.lc3.Common.Duration._10M;
-import static google.sound.lc3.Common.Duration._2M5;
-import static google.sound.lc3.Common.Duration._5M;
-import static google.sound.lc3.Common.Duration._7M5;
-import static google.sound.lc3.Common.isHR;
+import static google.sound.lc3.Lc3.Duration._10M;
+import static google.sound.lc3.Lc3.Duration._2M5;
+import static google.sound.lc3.Lc3.Duration._5M;
+import static google.sound.lc3.Lc3.Duration._7M5;
+import static google.sound.lc3.Lc3.isHR;
 
 
 class BwDet {
@@ -87,13 +87,13 @@ class BwDet {
      * @param e  Energy estimation per bands
      * @return Return detected bandwitdth
      */
-    BandWidth lc3_bwdet_run(Duration dt, SRate sr, float[] e) {
+    static BandWidth lc3_bwdet_run(Duration dt, SRate sr, float[] e) {
 
         // Stage 1
         // Determine bw0 candidate
 
-        BandWidth bw0 = BandWidth.NB;
-        BandWidth bwn = BandWidth.values()[sr.ordinal()];
+        BandWidth bw0 = Lc3.BandWidth.NB;
+        BandWidth bwn = Lc3.BandWidth.values()[sr.ordinal()];
 
         if (bwn.ordinal() == 0 || isHR(sr))
             return bwn;
@@ -101,7 +101,7 @@ class BwDet {
         region[] bwr = bws_table.get(dt)[bwn.ordinal() - 1];
 
         for (int j = 0; j < bwn.ordinal(); j++) {
-            BandWidth bw = BandWidth.values()[j];
+            BandWidth bw = Lc3.BandWidth.values()[j];
             int i = bwr[bw.ordinal()].is;
             int ie = bwr[bw.ordinal()].ie;
             int n = ie - i;
@@ -110,8 +110,8 @@ class BwDet {
             for (i++; i < ie; i++)
                 se += e[i];
 
-            if (se >= (10 << (bw == BandWidth.NB ? 1 : 0)) * n)
-                bw0 = BandWidth.values()[bw.ordinal() + 1];
+            if (se >= (10 << (bw == Lc3.BandWidth.NB ? 1 : 0)) * n)
+                bw0 = Lc3.BandWidth.values()[bw.ordinal() + 1];
         }
 
         // Stage 2
@@ -151,7 +151,7 @@ class BwDet {
      * @param sr   sampleRate of the frame
      * @param bw   Bandwidth detected
      */
-    void lc3_bwdet_put_bw(Bits bits, SRate sr, BandWidth bw) {
+    static void lc3_bwdet_put_bw(Bits bits, SRate sr, BandWidth bw) {
         int nbits_bw = lc3_bwdet_get_nbits(sr);
         if (nbits_bw > 0)
             bits.lc3_put_bits(bw.ordinal(), nbits_bw);
@@ -165,11 +165,11 @@ class BwDet {
      * @param bw   Return bandwidth indication
      * @return 0: Ok  -1: Invalid bandwidth indication
      */
-    int lc3_bwdet_get_bw(Bits bits, SRate sr, BandWidth[] bw) {
-        BandWidth max_bw = BandWidth.values()[sr.ordinal()];
+    static int lc3_bwdet_get_bw(Bits bits, SRate sr, BandWidth[] bw) {
+        BandWidth max_bw = Lc3.BandWidth.values()[sr.ordinal()];
         int nbits_bw = lc3_bwdet_get_nbits(sr);
 
-        bw[0] = nbits_bw <= 0 ? max_bw : BandWidth.values()[bits.lc3_get_bits(nbits_bw)];
+        bw[0] = nbits_bw <= 0 ? max_bw : Lc3.BandWidth.values()[bits.lc3_get_bits(nbits_bw)];
 
         if (bw[0].ordinal() > max_bw.ordinal()) {
             bw[0] = max_bw;

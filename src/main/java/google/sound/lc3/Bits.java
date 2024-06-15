@@ -319,23 +319,21 @@ class Bits {
     /**
      * Setup bitstream reading/writing
      *
-     * @param bits   Bitstream context
      * @param mode   Either READ or WRITE mode
      * @param buffer Output buffer
      * @param len    Output bufferlength (in bytes)
      */
-    void lc3_setup_bits(Bits bits, Mode mode, byte[] buffer, int len) {
-        bits = new Bits();
-        bits.mode = mode;
-        bits.accu = new Accu();
-        bits.accu.n = mode == READ ? LC3_ACCU_BITS : 0;
-        bits.buffer = new Buffer(buffer, len);
-        bits.ac = new Ac(bits.buffer);
+    Bits(Mode mode, byte[] buffer, int len) {
+        this.mode = mode;
+        this.accu = new Accu();
+        this.accu.n = mode == READ ? LC3_ACCU_BITS : 0;
+        this.buffer = new Buffer(buffer, len);
+        this.ac = new Ac(this.buffer);
 
         if (mode == READ) {
-            Ac ac = bits.ac;
-            Accu accu = bits.accu;
-            Buffer _buffer = bits.buffer;
+            Ac ac = this.ac;
+            Accu accu = this.accu;
+            Buffer _buffer = this.buffer;
 
             ac.low = ac_get(_buffer) << 16;
             ac.low |= ac_get(_buffer) << 8;

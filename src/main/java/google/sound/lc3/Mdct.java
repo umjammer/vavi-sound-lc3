@@ -18,9 +18,9 @@ package google.sound.lc3;
 
 import java.util.stream.IntStream;
 
-import google.sound.lc3.Common.Complex;
-import google.sound.lc3.Common.Duration;
-import google.sound.lc3.Common.SRate;
+import google.sound.lc3.Lc3.Complex;
+import google.sound.lc3.Lc3.Duration;
+import google.sound.lc3.Lc3.SRate;
 import google.sound.lc3.Tables.lc3_fft_bf2_twiddles;
 import google.sound.lc3.Tables.lc3_fft_bf3_twiddles;
 import google.sound.lc3.Tables.lc3_mdct_rot_def;
@@ -215,7 +215,7 @@ class Mdct {
      * @param y  Output windowed samples
      * @param d  Output delayed ones
      */
-    private void mdct_window(Duration dt, SRate sr, float[] x, float[] d, float[] y) {
+    private static void mdct_window(Duration dt, SRate sr, float[] x, int xp, float[] d, int dp, float[] y, int yp) {
         float[] win = lc3_mdct_win.get(dt)[sr.ordinal()];
         int ns = lc3_ns(dt, sr), nd = lc3_nd(dt, sr);
 
@@ -224,11 +224,11 @@ class Mdct {
         int w2 = w1;
         int w3 = w2 + nd;
 
-        int x0 = ns - nd; // x
+        int x0 = xp + ns - nd; // x
         int x1 = x0;
-        int y0 = ns / 2; // y
+        int y0 = yp + ns / 2; // y
         int y1 = y0;
-        int d0 = 0; // d
+        int d0 = dp; // d
         int d1 = nd;
 
         while (x1 > 0) {
@@ -257,7 +257,7 @@ class Mdct {
      * @param x   Input  coefficients
      * @param y   output coefficients
      */
-    private void mdct_pre_fft(lc3_mdct_rot_def def, float[] x, Complex[] y) {
+    private static void mdct_pre_fft(lc3_mdct_rot_def def, float[] x, Complex[] y) {
         int n4 = def.n4;
 
         int x0 = 0; // x;
@@ -293,7 +293,7 @@ class Mdct {
      * @param x   Input coefficients
      * @param y   output coefficients
      */
-    private void mdct_post_fft(lc3_mdct_rot_def def, Complex[] x, float[] y) {
+    private static void mdct_post_fft(lc3_mdct_rot_def def, Complex[] x, float[] y) {
         int n4 = def.n4, n8 = n4 >> 1;
 
         Complex[] w = def.w;
@@ -331,10 +331,10 @@ class Mdct {
      * @param x   Input coefficients
      * @param y   output coefficients
      */
-    private void imdct_pre_fft(lc3_mdct_rot_def def, float[] x, Complex[] y) {
+    private static void imdct_pre_fft(lc3_mdct_rot_def def, float[] x, int xp, Complex[] y) {
         int n4 = def.n4;
 
-        int x0 = 0; // x
+        int x0 = xp; // x
         int x1 = x0 + 2 * n4;
 
         Complex[] w = def.w;
@@ -370,7 +370,7 @@ class Mdct {
      * @param x   Input coefficients
      * @param y   output coefficients
      */
-    private void imdct_post_fft(lc3_mdct_rot_def def, Complex[] x, float[] y) {
+    private static void imdct_post_fft(lc3_mdct_rot_def def, Complex[] x, float[] y) {
         int n4 = def.n4;
 
         Complex[] w = def.w;
@@ -405,7 +405,7 @@ class Mdct {
      * @param d  delayed samples
      * @param y  Output samples
      */
-    private void imdct_window(Duration dt, SRate sr, float[] x, float[] d, float[] y) {
+    private static void imdct_window(Duration dt, SRate sr, float[] x, float[] d, float[] y) {
 
         // The full MDCT coefficients is given by symmetry :
         //   T[   0 ..  n/4-1] = -half[n/4-1 .. 0    ]
@@ -466,7 +466,7 @@ class Mdct {
      * @param n count of samples, scaled as output
      * @param f Scale factor
      */
-    private void rescale(float[] x, int n, float f) {
+    private static void rescale(float[] x, int n, float f) {
         int xP = 0;
         for (int i = 0; i < (n >> 2); i++) {
             x[xP++] *= f;
@@ -508,23 +508,23 @@ class Mdct {
      * <p>
      * `x` and `y` can be the same buffer
      *
-     * @param dt,    Duration  (size of the transform)
-     * @param sr     sampleRate
-     * @param sr_dst sampleRate destination, scale transform accordingly
-     * @param x      Temporal samples
-     * @param d      delayed buffer
-     * @param y      Output `ns` coefficients and `nd` delayed samples
+     * @param dt,   Duration  (size of the transform)
+     * @param sr    sampleRate
+     * @param srDst sampleRate destination, scale transform accordingly
+     * @param x     Temporal samples
+     * @param d     delayed buffer
+     * @param y     Output `ns` coefficients and `nd` delayed samples
      */
-    void lc3_mdct_forward(Duration dt, SRate sr, SRate sr_dst, float[] x, float[] d, float[] y) {
+    static void lc3_mdct_forward(Duration dt, SRate sr, SRate srDst, float[] x, int xp, float[] d, int dp, float[] y, int yp) {
         lc3_mdct_rot_def rot = lc3_mdct_rot.get(dt)[sr.ordinal()];
-        int ns_dst = lc3_ns(dt, sr_dst);
+        int ns_dst = lc3_ns(dt, srDst);
         int ns = lc3_ns(dt, sr);
 
         Complex[] buffer = new Complex[LC3_MAX_NS / 2];
         Complex[] z = new Union(y).z;
         Union u = new Union(buffer);
 
-        mdct_window(dt, sr, x, d, u.f());
+        mdct_window(dt, sr, x, xp, d, dp, u.f(), yp);
 
         mdct_pre_fft(rot, u.f(), u.z);
         u.z = fft(u.z, ns / 2, u.z, z);
@@ -546,7 +546,7 @@ class Mdct {
      * @param d     delayed buffer
      * @param y     Output `ns` samples and `nd` delayed ones
      */
-    void lc3_mdct_inverse(Duration dt, SRate sr, SRate srSrc, float[] x, float[] d, float[] y) {
+    static void lc3_mdct_inverse(Duration dt, SRate sr, SRate srSrc, float[] x, int xp, float[] d, int dp, float[] y, int yp) {
         lc3_mdct_rot_def rot = lc3_mdct_rot.get(dt)[sr.ordinal()];
         int ns_src = lc3_ns(dt, srSrc);
         int ns = lc3_ns(dt, sr);
@@ -555,7 +555,7 @@ class Mdct {
         Complex[] z = new Union(y).z;
         Union u = new Union(buffer);
 
-        imdct_pre_fft(rot, x, z);
+        imdct_pre_fft(rot, x, xp, z);
         z = fft(z, ns / 2, z, u.z);
         imdct_post_fft(rot, z, u.f());
 

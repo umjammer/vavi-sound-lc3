@@ -18,24 +18,27 @@ package google.sound.lc3;
 
 import java.util.Arrays;
 import java.util.Map;
+import java.util.function.Consumer;
 
-import google.sound.lc3.Common.DecaConsumer;
-import google.sound.lc3.Common.PentaConsumer;
-import google.sound.lc3.Common.Duration;
-import google.sound.lc3.Common.SRate;
+import google.sound.lc3.Lc3.DecaConsumer;
+import google.sound.lc3.Lc3.HexaConsumer;
+import google.sound.lc3.Lc3.PentaConsumer;
+import google.sound.lc3.Lc3.Duration;
+import google.sound.lc3.Lc3.SRate;
+import vavi.util.win32.WAVE.data;
 
-import static google.sound.lc3.Common.Duration._10M;
-import static google.sound.lc3.Common.Duration._2M5;
-import static google.sound.lc3.Common.Duration._5M;
-import static google.sound.lc3.Common.Duration._7M5;
-import static google.sound.lc3.Common.isHR;
-import static google.sound.lc3.Common.SRate._16K;
-import static google.sound.lc3.Common.SRate._24K;
-import static google.sound.lc3.Common.SRate._32K;
-import static google.sound.lc3.Common.SRate._48K;
-import static google.sound.lc3.Common.SRate._48K_HR;
-import static google.sound.lc3.Common.SRate._8K;
-import static google.sound.lc3.Common.SRate._96K_HR;
+import static google.sound.lc3.Lc3.Duration._10M;
+import static google.sound.lc3.Lc3.Duration._2M5;
+import static google.sound.lc3.Lc3.Duration._5M;
+import static google.sound.lc3.Lc3.Duration._7M5;
+import static google.sound.lc3.Lc3.isHR;
+import static google.sound.lc3.Lc3.SRate._16K;
+import static google.sound.lc3.Lc3.SRate._24K;
+import static google.sound.lc3.Lc3.SRate._32K;
+import static google.sound.lc3.Lc3.SRate._48K;
+import static google.sound.lc3.Lc3.SRate._48K_HR;
+import static google.sound.lc3.Lc3.SRate._8K;
+import static google.sound.lc3.Lc3.SRate._96K_HR;
 import static google.sound.lc3.Tables.LC3_MAX_SRATE_HZ;
 import static google.sound.lc3.Tables.lc3_nh;
 import static google.sound.lc3.Tables.lc3_ns;
@@ -47,22 +50,22 @@ import static google.sound.lc3.Tables.lc3_ns_4m;
  */
 class Ltpf {
 
-    static class lc3_ltpf_hp50_state {
+    private static class Hp50State {
         long s1, s2;
     }
 
-    static class lc3_ltpf_analysis {
+    static class Analysis {
         boolean active;
         int pitch;
         float[] nc = new float[2];
 
-        lc3_ltpf_hp50_state hp50;
+        Hp50State hp50;
         short[] x_12k8 = new short[384];
         short[] x_6k4 = new short[178];
         int tc;
     }
 
-    static class lc3_ltpf_synthesis {
+    static class Synthesis {
         boolean active;
         int pitch;
         float[] c = new float[2*12];
@@ -218,7 +221,7 @@ class Ltpf {
      * @param xn   Input sample, in fixed Q30
      * @return Filtered sample, in fixed Q30
      */
-    private static int filter_hp50(lc3_ltpf_hp50_state hp50, int xn) {
+    private static int filter_hp50(Hp50State hp50, int xn) {
         int yn = (int) ((hp50.s1 + (long) xn * hp50_b2) >> 30);
         hp50.s1 = (hp50.s2 + (long) xn * hp50_b1 - (long) yn * hp50_a1);
         hp50.s2 = ((long) xn * hp50_b2 - (long) yn * hp50_a2);
@@ -240,10 +243,10 @@ class Ltpf {
      * @param y    [0..n-1] Output processed samples, Q14
      * @param n    processed samples, Q14
      */
-    private static void resample_x64k_12k8(int p, short[] h, lc3_ltpf_hp50_state hp50, short[] x, short[] y, int yp, int n) {
+    private static void resample_x64k_12k8(int p, short[] h, Hp50State hp50, short[] x, int xp, short[] y, int yp, int n) {
         int w = 2 * (40 / p);
 
-        int xp = -(w - 1); // x
+        xp -= (w - 1); // x
 
         for (int i = 0; i < 5 * n; i += 5) {
             int hn = (i % p) * w; // h
@@ -282,10 +285,10 @@ class Ltpf {
      * @param y    [0..n-1] Output processed samples, Q14
      * @param n    processed samples, Q14
      */
-    private static void resample_x192k_12k8(int p, short[] h, lc3_ltpf_hp50_state hp50, short[] x, short[] y, int yp, int n) {
+    private static void resample_x192k_12k8(int p, short[] h, Hp50State hp50, short[] x, int xp, short[] y, int yp, int n) {
         int w = 2 * (120 / p);
 
-        int xp = -(w - 1); // x
+        xp -= (w - 1); // x
 
         for (int i = 0; i < 15 * n; i += 15) {
             int hn = (i % p) * w; // h
@@ -325,8 +328,8 @@ class Ltpf {
      * @param y    [0..n-1] Output processed samples, Q14
      * @param n    processed samples, Q14
      */
-    private static void resample_8k_12k8(lc3_ltpf_hp50_state hp50, short[] x, short[] y, int yp, int n) {
-        resample_x64k_12k8(8, h_8k_12k8_q15, hp50, x, y, yp, n);
+    private static void resample_8k_12k8(Hp50State hp50, short[] x, int xp, short[] y, int yp, int n) {
+        resample_x64k_12k8(8, h_8k_12k8_q15, hp50, x, xp, y, yp, n);
     }
 
     /**
@@ -339,8 +342,8 @@ class Ltpf {
      * @param y    [0..n-1] Output processed samples, in fixed Q14
      * @param n    processed samples, in fixed Q14
      */
-    private static void resample_16k_12k8(lc3_ltpf_hp50_state hp50, short[] x, short[] y, int yp, int n) {
-        resample_x64k_12k8(4, h_16k_12k8_q15, hp50, x, y, yp, n);
+    private static void resample_16k_12k8(Hp50State hp50, short[] x, int xp, short[] y, int yp, int n) {
+        resample_x64k_12k8(4, h_16k_12k8_q15, hp50, x, xp, y, yp, n);
     }
 
     /**
@@ -353,8 +356,8 @@ class Ltpf {
      * @param y    [0..n-1] Output processed samples, in fixed Q14
      * @param n    processed samples, in fixed Q14
      */
-    private static void resample_32k_12k8(lc3_ltpf_hp50_state hp50, short[] x, short[] y, int yp, int n) {
-        resample_x64k_12k8(2, h_32k_12k8_q15, hp50, x, y, yp, n);
+    private static void resample_32k_12k8(Hp50State hp50, short[] x, int xp, short[] y, int yp, int n) {
+        resample_x64k_12k8(2, h_32k_12k8_q15, hp50, x, xp, y, yp, n);
     }
 
     /**
@@ -367,8 +370,8 @@ class Ltpf {
      * @param y    [0..n-1] Output processed samples, in fixed Q14
      * @param n    processed samples, in fixed Q14
      */
-    private static void resample_24k_12k8(lc3_ltpf_hp50_state hp50, short[] x, short[] y, int yp, int n) {
-        resample_x192k_12k8(8, h_24k_12k8_q15, hp50, x, y, yp, n);
+    private static void resample_24k_12k8(Hp50State hp50, short[] x, int xp, short[] y, int yp, int n) {
+        resample_x192k_12k8(8, h_24k_12k8_q15, hp50, x, xp, y, yp, n);
     }
 
     /**
@@ -381,8 +384,8 @@ class Ltpf {
      * @param y    [0..n-1] Output processed samples, in fixed Q14
      * @param n    processed samples, in fixed Q14
      */
-    private static void resample_48k_12k8(lc3_ltpf_hp50_state hp50, short[] x, short[] y, int yp, int n) {
-        resample_x192k_12k8(4, h_48k_12k8_q15, hp50, x, y, yp, n);
+    private static void resample_48k_12k8(Hp50State hp50, short[] x,int xp,  short[] y, int yp, int n) {
+        resample_x192k_12k8(4, h_48k_12k8_q15, hp50, x, xp, y, yp, n);
     }
 
     /**
@@ -395,8 +398,8 @@ class Ltpf {
      * @param y    [0..n-1] Output processed samples, in fixed Q14
      * @param n    processed samples, in fixed Q14
      */
-    private static void resample_96k_12k8(lc3_ltpf_hp50_state hp50, short[] x, short[] y, int yp, int n) {
-        resample_x192k_12k8(2, h_96k_12k8_q15, hp50, x, y, yp, n);
+    private static void resample_96k_12k8(Hp50State hp50, short[] x, int xp, short[] y, int yp, int n) {
+        resample_x192k_12k8(2, h_96k_12k8_q15, hp50, x, xp, y, yp, n);
     }
 
     /**
@@ -408,7 +411,7 @@ class Ltpf {
      * @param y [0..n-1] Output processed samples
      * @param n processed samples
      */
-    private void resample_6k4(short[] x, int yp, short[] y, int xp, int n) {
+    static void resample_6k4(short[] x, int yp, short[] y, int xp, int n) {
         short[] h = {18477, 15424, 8105};
 
         for (xp--; yp < n; xp += 2)
@@ -418,7 +421,7 @@ class Ltpf {
     /**
      * LTPF Resample to 12.8 KHz implementations for each sampleRates
      */
-    private static Map<SRate, PentaConsumer<lc3_ltpf_hp50_state, short[], short[], Integer, Integer>> resample_12k8 = Map.of(
+    private static Map<SRate, HexaConsumer<Hp50State, short[], Integer, short[], Integer, Integer>> resample_12k8 = Map.of(
             _8K, Ltpf::resample_8k_12k8,
             _16K, Ltpf::resample_16k_12k8,
             _24K, Ltpf::resample_24k_12k8,
@@ -527,7 +530,7 @@ class Ltpf {
      * @param d The phase of interpolation (0 to 3)
      * @param y return The interpolated vector
      */
-    private void interpolate(short[] x, int xp, int n, int d, short[] y) {
+    private static void interpolate(short[] x, int xp, int n, int d, short[] y) {
         short[] h = h4_q15[d];
         short x3 = x[xp - 2];
         short x2 = x[xp - 1];
@@ -595,7 +598,7 @@ class Ltpf {
      * @param tc   Return the pitch-lag estimation
      * @return True when pitch present
      */
-    private static boolean detect_pitch(lc3_ltpf_analysis ltpf, short[] x, int xp, int n, int[] tc) {
+    private static boolean detect_pitch(Analysis ltpf, short[] x, int xp, int n, int[] tc) {
         float[] rm1 = new float[1], rm2 = new float[1];
         float[] r = new float[98];
 
@@ -669,7 +672,7 @@ class Ltpf {
         return e < 127 ? 4 * e + f - 128 : e < 157 ? 2 * e + (f >> 1) + 126 : e + 283;
     }
 
-    private static class lc3_ltpf_data {
+    static class lc3_ltpf_data {
 
         boolean active;
         int pitch_index;
@@ -693,7 +696,7 @@ class Ltpf {
      * @param data Return bitstream data
      * @return True when pitch present, False otherwise
      */
-    boolean lc3_ltpf_analyse(Duration dt, SRate sr, lc3_ltpf_analysis ltpf, short[] x, lc3_ltpf_data data) {
+    static boolean lc3_ltpf_analyse(Duration dt, SRate sr, Analysis ltpf, short[] x, int xp, lc3_ltpf_data data) {
 
         // Resampling to 12.8 KHz
 
@@ -705,7 +708,7 @@ class Ltpf {
 
         int x_12k8 = z_12k8 - n_12k8; // ltpf.x_12k8
 
-        resample_12k8.get(sr).accept(ltpf.hp50, x, ltpf.x_12k8, x_12k8, n_12k8);
+        resample_12k8.get(sr).accept(ltpf.hp50, x, xp, ltpf.x_12k8, x_12k8, n_12k8);
 
         x_12k8 -= (short) (dt.ordinal() == _7M5.ordinal() ? 44 : 24);
 
@@ -778,7 +781,7 @@ class Ltpf {
      *
      * @param data LTPF data, disabled activation on return
      */
-    void lc3_ltpf_disable(lc3_ltpf_data data) {
+    static void lc3_ltpf_disable(lc3_ltpf_data data) {
         data.active = false;
     }
 
@@ -798,7 +801,7 @@ class Ltpf {
      * @param bits Bitstream context
      * @param data LTPF data
      */
-    void lc3_ltpf_put_data(Bits bits, final lc3_ltpf_data data) {
+    static void lc3_ltpf_put_data(Bits bits, final lc3_ltpf_data data) {
         bits.lc3_put_bit(data.active ? 1 : 0);
         bits.lc3_put_bits(data.pitch_index, 9);
     }
@@ -813,7 +816,7 @@ class Ltpf {
      * @param bits Bitstream context
      * @param data Return bitstream data
      */
-    void lc3_ltpf_get_data(Bits bits, lc3_ltpf_data data) {
+    static void lc3_ltpf_get_data(Bits bits, lc3_ltpf_data data) {
         data.active = bits.lc3_get_bit() != 0;
         data.pitch_index = bits.lc3_get_bits(9);
     }
@@ -935,10 +938,9 @@ class Ltpf {
      * @param xh     Base address of ring buffer of decoded samples
      * @param x      Samples to proceed in the ring buffer, filtered as output
      */
-    void lc3_ltpf_synthesize(Duration dt, SRate sr, int nbytes,
-                             lc3_ltpf_synthesis ltpf, lc3_ltpf_data data,
-                             int /* float[] */ xh, float[] x) {
-int xp = 0; // TODO
+    static void lc3_ltpf_synthesize(Duration dt, SRate sr, int nbytes,
+                             Synthesis ltpf, lc3_ltpf_data data,
+                             int /* float[] */ xh, float[] x, int xp) {
 
         int nh = lc3_ns(dt, sr) + lc3_nh(dt, sr);
 

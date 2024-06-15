@@ -18,22 +18,22 @@ package google.sound.lc3;
 
 import java.util.Map;
 
-import google.sound.lc3.Common.Duration;
-import google.sound.lc3.Common.SRate;
+import google.sound.lc3.Lc3.Duration;
+import google.sound.lc3.Lc3.SRate;
 
-import static google.sound.lc3.Common.Duration._10M;
-import static google.sound.lc3.Common.Duration._2M5;
-import static google.sound.lc3.Common.Duration._5M;
-import static google.sound.lc3.Common.Duration._7M5;
+import static google.sound.lc3.Lc3.Duration._10M;
+import static google.sound.lc3.Lc3.Duration._2M5;
+import static google.sound.lc3.Lc3.Duration._5M;
+import static google.sound.lc3.Lc3.Duration._7M5;
 
 
 class Energy {
 
     private static final Map<Duration, Integer> map = Map.of(
-            Duration._2M5, 2,
-            Duration._5M, 3,
-            Duration._7M5, 4,
-            Duration._10M, 2
+            Lc3.Duration._2M5, 2,
+            Lc3.Duration._5M, 3,
+            Lc3.Duration._7M5, 4,
+            Lc3.Duration._10M, 2
     );
 
     /**
@@ -45,7 +45,7 @@ class Energy {
      * @param e  Energy estimation per bands
      * @return True when high energy detected near Nyquist frequency
      */
-    boolean lc3_energy_compute(Duration dt, SRate sr, final float[] x, float[] e) {
+    static boolean lc3_energy_compute(Duration dt, SRate sr, final float[] x, int xp, float[] e) {
         int nb = lc3_num_bands.get(dt)[sr.ordinal()];
         int[] lim = lc3_band_lim.get(dt)[sr.ordinal()];
 
@@ -59,9 +59,9 @@ class Energy {
             int ie = lim[iband + 1];
             int n = ie - i;
 
-            float sx2 = x[i] * x[i];
+            float sx2 = x[xp + i] * x[xp + i];
             for (i++; i < ie; i++)
-                sx2 += x[i] * x[i];
+                sx2 += x[xp + i] * x[xp + i];
 
             e[eP] = sx2 / n;
             e_sum[iband >= iband_h ? 1 : 0] += e[eP++];

@@ -16,8 +16,8 @@
 
 package google.sound.lc3;
 
-import google.sound.lc3.Common.Duration;
-import google.sound.lc3.Common.SRate;
+import google.sound.lc3.Lc3.Duration;
+import google.sound.lc3.Lc3.SRate;
 
 import static google.sound.lc3.Tables.lc3_ne;
 
@@ -54,7 +54,7 @@ class Plc {
      * @param x  Last good spectral coefficients
      * @param y  Return emulated ones
      */
-    void lc3_plc_synthesize(Duration dt, SRate sr, float[] x, float[] y) {
+    void lc3_plc_synthesize(Duration dt, SRate sr, float[] x, int xp, float[] y, int yp) {
         int seed = this.seed;
         float alpha = this.alpha;
         int ne = lc3_ne(dt, sr);
@@ -63,7 +63,7 @@ class Plc {
 
         for (int i = 0; i < ne; i++) {
             seed = (16831 + seed * 12821) & 0xffff;
-            y[i] = alpha * ((seed & 0x8000) != 0 ? -x[i] : x[i]);
+            y[yp + i] = alpha * ((seed & 0x8000) != 0 ? -x[xp + i] : x[xp + i]);
         }
 
         this.seed = seed;

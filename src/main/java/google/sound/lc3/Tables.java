@@ -21,26 +21,28 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
+import java.util.logging.Level;
 import java.util.stream.IntStream;
 
-import google.sound.lc3.Common.Complex;
-import google.sound.lc3.Common.Duration;
-import google.sound.lc3.Common.SRate;
+import google.sound.lc3.Lc3.Complex;
+import google.sound.lc3.Lc3.Duration;
+import google.sound.lc3.Lc3.SRate;
+import vavi.util.Debug;
 
-import static google.sound.lc3.Common.Duration._10M;
-import static google.sound.lc3.Common.Duration._2M5;
-import static google.sound.lc3.Common.Duration._5M;
-import static google.sound.lc3.Common.Duration._7M5;
-import static google.sound.lc3.Common.LC3_NS;
-import static google.sound.lc3.Common.LC3_PLUS_HR;
-import static google.sound.lc3.Common.SRate._16K;
-import static google.sound.lc3.Common.SRate._24K;
-import static google.sound.lc3.Common.SRate._32K;
-import static google.sound.lc3.Common.SRate._48K;
-import static google.sound.lc3.Common.SRate._48K_HR;
-import static google.sound.lc3.Common.SRate._8K;
-import static google.sound.lc3.Common.SRate._96K_HR;
-import static google.sound.lc3.Common.isHR;
+import static google.sound.lc3.Lc3.Duration._10M;
+import static google.sound.lc3.Lc3.Duration._2M5;
+import static google.sound.lc3.Lc3.Duration._5M;
+import static google.sound.lc3.Lc3.Duration._7M5;
+import static google.sound.lc3.Lc3.LC3_NS;
+import static google.sound.lc3.Lc3.LC3_PLUS_HR;
+import static google.sound.lc3.Lc3.SRate._16K;
+import static google.sound.lc3.Lc3.SRate._24K;
+import static google.sound.lc3.Lc3.SRate._32K;
+import static google.sound.lc3.Lc3.SRate._48K;
+import static google.sound.lc3.Lc3.SRate._48K_HR;
+import static google.sound.lc3.Lc3.SRate._8K;
+import static google.sound.lc3.Lc3.SRate._96K_HR;
+import static google.sound.lc3.Lc3.isHR;
 import static google.sound.lc3.Lc3.LC3_MAX_FRAME_BYTES;
 import static google.sound.lc3.Lc3.LC3_MIN_FRAME_BYTES;
 
@@ -141,12 +143,12 @@ class Tables {
             )
     );
 
-    private int lc3_min_frame_bytes(Duration dt, SRate sr) {
+    static int lc3_min_frame_bytes(Duration dt, SRate sr) {
         return !isHR(sr) ? LC3_MIN_FRAME_BYTES :
                 lc3_frame_bytes_hr_lim.get(dt).get(sr.ordinal() - _48K_HR.ordinal())[0];
     }
 
-    private int lc3_max_frame_bytes(Duration dt, SRate sr) {
+    static int lc3_max_frame_bytes(Duration dt, SRate sr) {
         return !isHR(sr) ? LC3_MAX_FRAME_BYTES :
                 lc3_frame_bytes_hr_lim.get(dt).get(sr.ordinal() - _48K_HR.ordinal())[1];
     }
@@ -332,10 +334,11 @@ class Tables {
     private static float[] init_mdct_win(String f) {
         List<Float> l = new ArrayList<>();
         Scanner s = new Scanner(Tables.class.getResourceAsStream(f + ".txt"));
-        s.useDelimiter("[\s,]");
+        s.useDelimiter("[\\s,f]+");
         while (s.hasNextFloat()) {
             l.add(s.nextFloat());
         }
+Debug.println(Level.FINEST, f + ": " + l.size());
         return l.stream().collect(() -> FloatBuffer.allocate(l.size()), FloatBuffer::put, (left, right) -> {}).array();
     }
 

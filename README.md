@@ -35,4 +35,4 @@
 
  * research difference between `NativeLong` and `PointerByReference` at method argument
    * this time `NativeLong` works well and `PointerByReference` does not
- * pure java version from [google's](https://github.com/google/liblc3)
+ * ~~pure java version from [google's](https://github.com/google/liblc3)~~ (wip)

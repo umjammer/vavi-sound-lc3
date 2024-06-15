@@ -19,16 +19,15 @@ package google.sound.lc3;
 import java.util.Map;
 
 import google.sound.lc3.Bits.AcModel;
-import google.sound.lc3.Common.BandWidth;
-import google.sound.lc3.Common.Duration;
-import google.sound.lc3.Common.SRate;
+import google.sound.lc3.Lc3.BandWidth;
+import google.sound.lc3.Lc3.Duration;
 
-import static google.sound.lc3.Common.BandWidth.FB;
-import static google.sound.lc3.Common.BandWidth.SWB;
-import static google.sound.lc3.Common.Duration._10M;
-import static google.sound.lc3.Common.Duration._2M5;
-import static google.sound.lc3.Common.Duration._5M;
-import static google.sound.lc3.Common.Duration._7M5;
+import static google.sound.lc3.Lc3.BandWidth.FB;
+import static google.sound.lc3.Lc3.BandWidth.SWB;
+import static google.sound.lc3.Lc3.Duration._10M;
+import static google.sound.lc3.Lc3.Duration._2M5;
+import static google.sound.lc3.Lc3.Duration._5M;
+import static google.sound.lc3.Lc3.Duration._7M5;
 import static google.sound.lc3.Tables.lc3_ne;
 
 
@@ -135,7 +134,7 @@ class Tns {
      * @param a        LPC coefficients
      */
     private static void compute_lpc_coeffs(Duration dt, BandWidth bw, int maxOrder,
-                                           float[] x, float[] gain, float[][/* 9 */] a) {
+                                           float[] x, int xp, float[] gain, float[][/* 9 */] a) {
 
         int[] sub = subTable.get(dt)[bw.ordinal()];
 
@@ -146,7 +145,7 @@ class Tns {
 
         int subP = 0; // sub
         int xs;
-        int xe = sub[subP]; // x
+        int xe = xp + sub[subP]; // x
         float[][] r = new float[2][9];
 
         for (int f = 0; f < nFilters; f++) {
@@ -340,7 +339,7 @@ class Tns {
                                           int[/* 2 */] rc_order, float[][/* 8 */] rc, float[] x) {
 
         int nFilters = 1 + (dt.ordinal() >= _5M.ordinal() && bw.ordinal() >= SWB.ordinal() ? 1 : 0);
-        int nf = lc3_ne(dt, SRate.values()[Math.min(bw.ordinal(), FB.ordinal())]) >> (nFilters - 1);
+        int nf = lc3_ne(dt, Lc3.SRate.values()[Math.min(bw.ordinal(), FB.ordinal())]) >> (nFilters - 1);
         int i0, ie = 3 * (1 + dt.ordinal());
 
         float[] s = new float[8];
@@ -380,10 +379,10 @@ class Tns {
      * @param x        Spectral coefficients, filtered as output
      */
     private static void inverse_filtering(Duration dt, BandWidth bw,
-                                          int[/* 2 */] rc_order, float[][/* 8 */] rc, float[] x) {
+                                          int[/* 2 */] rc_order, float[][/* 8 */] rc, float[] x, int xp) {
 
         int nFilters = 1 + (dt.ordinal() >= _5M.ordinal() && bw.ordinal() >= SWB.ordinal() ? 1 : 0);
-        int nf = lc3_ne(dt, SRate.values()[Math.min(bw.ordinal(), FB.ordinal())]) >> (nFilters - 1);
+        int nf = lc3_ne(dt, Lc3.SRate.values()[Math.min(bw.ordinal(), FB.ordinal())]) >> (nFilters - 1);
         int i0, ie = 3 * (1 + dt.ordinal());
 
         float[] s = new float[8];
@@ -397,7 +396,7 @@ class Tns {
                 continue;
 
             for (int i = i0; i < ie; i++) {
-                float xi = x[i];
+                float xi = x[xp + i];
 
                 xi -= s[7] * rc[f][7];
                 for (int k = 6; k >= 0; k--) {
@@ -405,7 +404,7 @@ class Tns {
                     s[k + 1] = s[k] + rc[f][k] * xi;
                 }
                 s[0] = xi;
-                x[i] = xi;
+                x[xp + i] = xi;
             }
 
             for (int k = 7; k >= rc_order[f]; k--)
@@ -432,7 +431,7 @@ class Tns {
      * @param data   Return bitstream data
      * @param x      Spectral coefficients, filtered as output
      */
-    void lc3_tns_analyze(Duration dt, BandWidth bw, boolean nnFlag, int nBytes, Tns data, float[] x) {
+    static void lc3_tns_analyze(Duration dt, BandWidth bw, boolean nnFlag, int nBytes, Tns data, float[] x, int xp) {
         // Processing steps :
         // - Determine the LPC (Linear Predictive Coding) Coefficients
         // - Check is the filtering is disabled
@@ -448,7 +447,7 @@ class Tns {
         data.nFilters = 1 + (dt.ordinal() >= _5M.ordinal() && bw.ordinal() >= SWB.ordinal() ? 1 : 0);
         int maxOrder = dt.ordinal() <= _5M.ordinal() ? 4 : 8;
 
-        compute_lpc_coeffs(dt, bw, maxOrder, x, predGain, a);
+        compute_lpc_coeffs(dt, bw, maxOrder, x, xp, predGain, a);
 
         for (int f = 0; f < data.nFilters; f++) {
 
@@ -499,7 +498,7 @@ class Tns {
      * @param bits Bitstream context
      * @param data Bitstream data
      */
-    void lc3_tns_put_data(Bits bits, Tns data) {
+    static void lc3_tns_put_data(Bits bits, Tns data) {
         for (int f = 0; f < data.nFilters; f++) {
             int rc_order = data.rcOrder[f];
 
@@ -528,7 +527,7 @@ class Tns {
      * @param data   Bitstream data
      * @return 0: Ok  -1: Invalid bitstream data
      */
-    int lc3_tns_get_data(Bits bits, Duration dt, BandWidth bw, int nBytes, Tns data) {
+    static int lc3_tns_get_data(Bits bits, Duration dt, BandWidth bw, int nBytes, Tns data) {
         data.nFilters = 1 + ((dt.ordinal() >= _5M.ordinal() && bw.ordinal() >= SWB.ordinal()) ? 1 : 0);
         data.lpcWeighting = resolve_lpc_weighting(dt, nBytes);
 
@@ -557,17 +556,17 @@ class Tns {
      * @param data Bitstream data
      * @param x    Spectral coefficients, filtered as output
      */
-    void lc3_tns_synthesize(Duration dt, BandWidth bw, Tns data, float[] x) {
+    static void lc3_tns_synthesize(Duration dt, BandWidth bw, Tns data, float[] x, int xp) {
         float[][] rc = new float[2][8];
 
         for (int f = 0; f < data.nFilters; f++)
             if (data.rcOrder[f] != 0)
                 unquantize_rc(data.rc[f], data.rcOrder[f], rc[f]);
 
-        inverse_filtering(dt, bw, data.rcOrder, rc, x);
+        inverse_filtering(dt, bw, data.rcOrder, rc, x, xp);
     }
 
-    private final AcModel[] lc3_tns_order_models = {
+    private static final AcModel[] lc3_tns_order_models = {
             new AcModel(new int[][] {
                     {0, 3}, {3, 9}, {12, 23}, {35, 54},
                     {89, 111}, {200, 190}, {390, 268}, {658, 366},
