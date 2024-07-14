@@ -66,8 +66,8 @@ class BwDet {
     };
 
     private static final Map<Duration, region[][/* SWB + 1 */]> bws_table = Map.of(
-            _2M5, bws_table_2m5,
-            _5M, bws_table_5m,
+            _2M5, bws_table_2m5, // LC3_IF_PLUS(bws_table_2m5, null),
+            _5M, bws_table_5m, // LC3_IF_PLUS(bws_table_5m, null),
             _7M5, bws_table_7m5,
             _10M, bws_table_10m
     );

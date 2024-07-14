@@ -55,8 +55,7 @@ class AttDet {
      * @param x      [-6..-1] Previous, [0..ns-1] Current samples
      * @return 1: Attack detected  0: Otherwise
      */
-    static boolean lc3_attdet_run(Duration dt, SRate sr,
-                                  int nBytes, Analysis attDet, short[] x, int xp) {
+    static boolean lc3_attdet_run(Duration dt, SRate sr, int nBytes, Analysis attDet, short[] x, int xp) {
 
         // Check enabling
 

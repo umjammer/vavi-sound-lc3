@@ -18,18 +18,17 @@
 
 package google.sound.lc3;
 
-
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
 import java.nio.ShortBuffer;
 import java.util.Arrays;
-import java.util.Map;
 
 import google.sound.lc3.AttDet.Analysis;
 import google.sound.lc3.Bits.Mode;
 import google.sound.lc3.Ltpf.Synthesis;
-import google.sound.lc3.Ltpf.lc3_ltpf_data;
+import vavi.util.Debug;
 
 import static google.sound.lc3.AttDet.lc3_attdet_run;
 import static google.sound.lc3.BwDet.lc3_bwdet_get_bw;
@@ -45,13 +44,9 @@ import static google.sound.lc3.Lc3.SRate._48K;
 import static google.sound.lc3.Lc3.SRate._48K_HR;
 import static google.sound.lc3.Lc3.SRate._8K;
 import static google.sound.lc3.Lc3.SRate._96K_HR;
-import static google.sound.lc3.Ltpf.lc3_ltpf_analyse;
-import static google.sound.lc3.Ltpf.lc3_ltpf_disable;
-import static google.sound.lc3.Ltpf.lc3_ltpf_get_data;
-import static google.sound.lc3.Ltpf.lc3_ltpf_put_data;
 import static google.sound.lc3.Ltpf.lc3_ltpf_synthesize;
-import static google.sound.lc3.Mdct.lc3_mdct_forward;
-import static google.sound.lc3.Mdct.lc3_mdct_inverse;
+import static google.sound.lc3.Mdct.forward;
+import static google.sound.lc3.Mdct.inverse;
 import static google.sound.lc3.Tables.lc3_max_frame_bytes;
 import static google.sound.lc3.Tables.lc3_min_frame_bytes;
 import static google.sound.lc3.Tables.lc3_nd;
@@ -59,10 +54,6 @@ import static google.sound.lc3.Tables.lc3_ne;
 import static google.sound.lc3.Tables.lc3_nh;
 import static google.sound.lc3.Tables.lc3_ns;
 import static google.sound.lc3.Tables.lc3_nt;
-import static google.sound.lc3.Tns.lc3_tns_analyze;
-import static google.sound.lc3.Tns.lc3_tns_get_data;
-import static google.sound.lc3.Tns.lc3_tns_put_data;
-import static google.sound.lc3.Tns.lc3_tns_synthesize;
 
 
 /**
@@ -217,6 +208,87 @@ import static google.sound.lc3.Tns.lc3_tns_synthesize;
  */
 class Lc3 {
 
+    interface HexaConsumer<T, U, V, W, X, Y> {
+
+        void accept(T t, U u, V v, W w, X x, Y y);
+    }
+
+    interface DecaConsumer<T, U, V, W, X, Y, Z, A, B, C> {
+
+        void accept(T t, U u, V v, W w, X x, Y y, Z z, A a, B b, C c);
+    }
+
+//#region common.h
+
+    /**
+     * Activation flags for LC3-Plus and LC3-Plus HR features
+     */
+
+    static boolean LC3_PLUS = Boolean.parseBoolean(System.getProperty("google.sound.lc3.plus", "false"));
+
+    static boolean LC3_PLUS_HR = Boolean.parseBoolean(System.getProperty("google.sound.lc3.hr", "false"));
+
+    static <T> T LC3_IF_PLUS(T a, T b) {
+        return LC3_PLUS ? a : b;
+    }
+
+    static <T> T LC3_IF_PLUS_HR(T a, T b) {
+        return LC3_PLUS_HR ? a : b;
+    }
+
+    static int clip(int v, int min, int max) {
+        return Math.min(Math.max(v, min), max);
+    }
+
+    static int LC3_SAT16(int v) { return clip(v, -(1 << 15), (1 << 15) - 1); }
+    static int LC3_SAT24(int v) { return clip(v, -(1 << 23), (1 << 23) - 1); }
+
+    /**
+     * Return `true` when high-resolution mode
+     */
+    static boolean isHR(SRate sr) {
+        return LC3_PLUS_HR && (sr.ordinal() >= _48K_HR.ordinal());
+    }
+
+    /**
+     * Bandwidth, mapped to Nyquist frequency of sampleRates
+     */
+    enum BandWidth {
+        NB,
+        WB,
+        SSWB,
+        SWB,
+        FB,
+
+        FB_HR,
+        UB_HR,
+
+        LC3_NUM_BANDWIDTH;
+    }
+
+    /**
+     * Complex floating point number
+     */
+    static class Complex {
+
+        float re;
+        float im;
+
+        Complex() {
+        }
+
+        Complex(float re, float im) {
+            this.re = re;
+            this.im = im;
+        }
+
+        @Override public String toString() { return String.format("{% 9.4f, % 9.4f}", re, im); }
+    }
+
+//#endregion
+
+//#region lc3.h
+
     /*
      * Limitations
      * - On the bitrate, in bps
@@ -258,9 +330,198 @@ class Lc3 {
         return hrmode ? sr == 48000 || sr == 96000 : LC3_CHECK_SR_HZ(sr);
     }
 
-    /*
-     * Activation flags for LC3-Plus and LC3-Plus HR features
+    /**
+     * PCM Sample Format
+     * S16      Signed 16 bits, in 16 bits words (int16_t)
+     * S24      Signed 24 bits, using low three bytes of 32 bits words (int).
+     * The high byte sign extends (bits 31..24 set to b23).
+     * S24_3LE  Signed 24 bits packed in 3 bytes little endian
+     * FLOAT    Floating point 32 bits (float type), in range -1 to 1
      */
+    enum lc3_pcm_format {
+        LC3_PCM_FORMAT_S16 {
+            /**
+             * Input PCM Samples from signed 16 bits
+             */
+            @Override void load(Encoder encoder, byte[] pcm, int stride) {
+                ShortBuffer pcm_ = ByteBuffer.wrap(pcm).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer();
+
+                Duration dt = encoder.dt;
+                SRate sr = encoder.sr_pcm;
+
+                int xt = encoder.xt_off; // encoder.x
+                int xs = encoder.xs_off; // encoder.x
+                int ns = lc3_ns(dt, sr);
+
+                for (int i = 0; i < ns; i++ /*, pcm += stride */) { // TODO consider stride
+                    encoder.x[xt + i] = pcm_.get();
+                    encoder.x[xs + i] = pcm_.get();
+                }
+            }
+            /**
+             * Output PCM Samples to signed 16 bits
+             */
+            @Override void store(Decoder decoder, byte[] pcm, int op, int stride) {
+                ShortBuffer pcm_ = ByteBuffer.wrap(pcm, op, pcm.length - op).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer();
+
+                Duration dt = decoder.dt;
+                SRate sr = decoder.sr_pcm;
+
+                int xs = decoder.xs_off; // decoder.x
+                int ns = lc3_ns(dt, sr);
+
+                int pcmP = 0;
+                for (; ns > 0; ns--, xs++, pcmP += stride) {
+                    int s = decoder.x[xs] >= 0 ? (int) (decoder.x[xs] + 0.5f) : (int) (decoder.x[xs] - 0.5f);
+                    pcm_.put(pcmP, (short) LC3_SAT16(s));
+                }
+            }
+
+        },
+        LC3_PCM_FORMAT_S24 {
+            /**
+             * Input PCM Samples from signed 24 bits
+             */
+            @Override void load(Encoder encoder, byte[] pcm, int stride) {
+                IntBuffer pcm_ = ByteBuffer.wrap(pcm).order(ByteOrder.LITTLE_ENDIAN).asIntBuffer();
+
+                Duration dt = encoder.dt;
+                SRate sr = encoder.sr_pcm;
+
+                int xt = encoder.xt_off; // encoder.x
+                int xs = encoder.xs_off; // encoder.x
+                int ns = lc3_ns(dt, sr);
+
+                for (int i = 0; i < ns; i++ /*, pcm += stride */) { // TODO consider stride
+                    encoder.x[xt + i] = pcm_.get() >>> 8;
+                    encoder.x[xs + i] = lc3_ldexpf(pcm_.get(), -8);
+                }
+            }
+            /**
+             * Output PCM Samples to signed 24 bits
+             */
+            @Override void store(Decoder decoder, byte[] pcm, int op, int stride) {
+                IntBuffer pcm_ = ByteBuffer.wrap(pcm, op, pcm.length - op).order(ByteOrder.LITTLE_ENDIAN).asIntBuffer();
+
+                Duration dt = decoder.dt;
+                SRate sr = decoder.sr_pcm;
+
+                int xs = decoder.xs_off; // decoder.x
+                int ns = lc3_ns(dt, sr);
+
+                for (; ns > 0; ns--, xs++ /*, pcm += stride */) { // TODO consider stride
+                    int s = decoder.x[xs] >= 0
+                            ? (int) (lc3_ldexpf(decoder.x[xs], 8) + 0.5f)
+                            : (int) (lc3_ldexpf(decoder.x[xs], 8) - 0.5f);
+                    pcm_.put(LC3_SAT24(s));
+                }
+            }
+
+        },
+        LC3_PCM_FORMAT_S24_3LE {
+            /**
+             * Input PCM Samples from signed 24 bits packed
+             */
+            @Override void load(Encoder encoder, byte[] pcm, int stride) {
+
+                Duration dt = encoder.dt;
+                SRate sr = encoder.sr_pcm;
+
+                int xt = encoder.xt_off; // encoder.x
+                int xs = encoder.xs_off; // encoder.x
+                int ns = lc3_ns(dt, sr);
+
+                for (int i = 0; i < ns; i++ /*, pcm += 3 * stride */) { // TODO consider stride
+                    int in = ((pcm[0] & 0xff) << 8) |
+                            ((pcm[1] & 0xff) << 16) |
+                            ((pcm[2] & 0xff) << 24);
+
+                    encoder.x[xt + i] = in >>> 16;
+                    encoder.x[xs + i] = lc3_ldexpf(in, -16);
+                }
+            }
+            /**
+             * Output PCM Samples to signed 24 bits packed
+             */
+            @Override void store(Decoder decoder, byte[] pcm, int op, int stride) {
+                byte[] pcm_ = Arrays.copyOfRange(pcm, op, pcm.length - op);
+
+                Duration dt = decoder.dt;
+                SRate sr = decoder.sr_pcm;
+
+                int xs = decoder.xs_off; // decoder.x
+                int ns = lc3_ns(dt, sr);
+
+                int pcmp = 0;
+                for (; ns > 0; ns--, xs++, pcmp += 3 * stride) {
+                    int s = decoder.x[xs] >= 0 ? (int) (lc3_ldexpf(decoder.x[xs], 8)+0.5f)
+                            :(int) (lc3_ldexpf(decoder.x[xs], 8)-0.5f);
+
+                    s = LC3_SAT24(s);
+                    pcm_[pcmp + 0] = (byte) ((s >> 0) & 0xff);
+                    pcm_[pcmp + 1] = (byte) ((s >> 8) & 0xff);
+                    pcm_[pcmp + 2] = (byte) ((s >> 16) & 0xff);
+                }
+            }
+        },
+        LC3_PCM_FORMAT_FLOAT {
+            /**
+             * Input PCM Samples from float 32 bits
+             */
+            @Override void load(Encoder encoder, byte[] pcm, int stride) {
+                FloatBuffer pcm_ = ByteBuffer.wrap(pcm).order(ByteOrder.LITTLE_ENDIAN).asFloatBuffer();
+
+                Duration dt = encoder.dt;
+                SRate sr = encoder.sr_pcm;
+
+                int xt = encoder.xt_off; // encoder.x
+                int xs = encoder.xs_off; // encoder.x
+                int ns = lc3_ns(dt, sr);
+
+                for (int i = 0; i < ns; i++ /* , pcm += stride */) { // TODO consider stride
+                    encoder.x[xs + i] = lc3_ldexpf(pcm_.get(), 15);
+                    encoder.x[xt + i] = LC3_SAT16((int) encoder.x[xs + i]);
+                }
+            }
+            /**
+             * Output PCM Samples to float 32 bits
+             */
+            @Override void store(Decoder decoder, byte[] pcm, int op, int stride) {
+                FloatBuffer pcm_ = ByteBuffer.wrap(pcm, op, pcm.length - op).order(ByteOrder.LITTLE_ENDIAN).asFloatBuffer();
+
+                Duration dt = decoder.dt;
+                SRate sr = decoder.sr_pcm;
+
+                int xs = decoder.xs_off; // decoder.x
+                int ns = lc3_ns(dt, sr);
+
+                for (; ns > 0; ns--, xs++ /*, pcm += stride */) { // TODO consider stride
+                    float s = lc3_ldexpf(decoder.x[xs], -15);
+                    pcm_.put(Math.min(Math.max(s, -1.f), 1.f));
+                }
+            }
+        };
+        /**
+         * Input PCM Samples.
+         *
+         * @param encoder Encoder state
+         * @param pcm     Input PCM samples
+         * @param stride  count between two consecutive
+         */
+        abstract void load(Encoder encoder, byte[] pcm, int stride);
+        /**
+         * Output PCM Samples.
+         *
+         * @param decoder Decoder state
+         * @param pcm     Output PCM samples
+         * @param stride  count between two consecutive
+         */
+        abstract void store(Decoder decoder, byte[] pcm, int op, int stride);
+    }
+
+//#endregion
+
+//#region lc3_private.h
 
     /*
      * Characteristics
@@ -268,20 +529,13 @@ class Lc3 {
      * - The number of samples within a frame
      *
      * - The number of MDCT delayed samples, sum of half a frame and
-     *   an ovelap of future by 1.25 ms (2.5ms, 5ms and 10ms frame durations)
+     *   an overlap of future by 1.25 ms (2.5ms, 5ms and 10ms frame durations)
      *   or 2 ms (7.5ms frame duration).
      *
      * - For decoding, keep 18 ms of history, aligned on a frame
      *
      * - For encoding, keep 1.25 ms of temporal previous samples
      */
-
-    /*
-     * Hot Function attribute
-     * Selectively disable sanitizer
-     */
-
-    static boolean LC3_PLUS_HR = true;
 
     static int LC3_NS(int dt_us, int sr_hz) {
         return ((dt_us) * (sr_hz) / 1000 / 1000);
@@ -299,42 +553,6 @@ class Lc3 {
 
     static int LC3_NT(int sr_hz) {
         return (LC3_NS(1250, sr_hz));
-    }
-
-    static int clip(int v, int min, int max) {
-        return Math.min(Math.max(v, min), max);
-    }
-
-    static int LC3_SAT16(int v) { return clip(v, -(1 << 15), (1 << 15) - 1); }
-    static int LC3_SAT24(int v) { return clip(v, -(1 << 23), (1 << 23) - 1); }
-
-    /**
-     * Return `true` when high-resolution mode
-     */
-    static boolean lc3_hr(SRate sr) {
-        return LC3_PLUS_HR && (sr.ordinal() >= _48K_HR.ordinal());
-    }
-
-    /**
-     * Return `true` when high-resolution mode
-     */
-    static boolean isHR(SRate sr) {
-        return LC3_PLUS_HR && (sr.ordinal() >= _48K_HR.ordinal());
-    }
-
-    /**
-     * PCM Sample Format
-     * S16      Signed 16 bits, in 16 bits words (int16_t)
-     * S24      Signed 24 bits, using low three bytes of 32 bits words (int).
-     * The high byte sign extends (bits 31..24 set to b23).
-     * S24_3LE  Signed 24 bits packed in 3 bytes little endian
-     * FLOAT    Floating point 32 bits (float type), in range -1 to 1
-     */
-    enum lc3_pcm_format {
-        LC3_PCM_FORMAT_S16,
-        LC3_PCM_FORMAT_S24,
-        LC3_PCM_FORMAT_S24_3LE,
-        LC3_PCM_FORMAT_FLOAT,
     }
 
     /**
@@ -360,14 +578,17 @@ class Lc3 {
         _96K_HR,
     }
 
-    static class lc3_encoder {
+    /**
+     * Encoder state and memory
+     */
+    static class Encoder {
 
         Duration dt;
         SRate sr, sr_pcm;
 
-        Analysis attdet;
-        Ltpf.Analysis ltpf;
-        Spec.Analysis spec;
+        Analysis attdet = new Analysis();
+        Ltpf.Analysis ltpf = new Ltpf.Analysis();
+        Spec.Analysis spec = new Spec.Analysis();
 
         int xt_off, xs_off, xd_off;
         float[] x = new float[1];
@@ -377,23 +598,26 @@ class Lc3 {
         return ((LC3_NS(dt_us, sr_hz) + LC3_NT(sr_hz)) / 2 + LC3_NS(dt_us, sr_hz) + LC3_ND(dt_us, sr_hz));
     }
 
-    static lc3_encoder LC3_ENCODER_MEM_T(int dt_us, int sr_hz) {
-        return new lc3_encoder() {
-            lc3_encoder __e;
-            float[] __x = new float[LC3_ENCODER_BUFFER_COUNT(dt_us, sr_hz) - 1];
+    static Encoder LC3_ENCODER_MEM_T(int dt_us, int sr_hz) {
+        return new Encoder() {
+            Encoder __e;
+            final float[] __x = new float[LC3_ENCODER_BUFFER_COUNT(dt_us, sr_hz) - 1];
         };
     }
 
-    static class lc3_decoder {
+    /**
+     * Decoder state and memory
+     */
+    static class Decoder {
 
         Duration dt;
         SRate sr, sr_pcm;
 
-        Synthesis ltpf;
+        Synthesis ltpf = new Synthesis();
         Plc plc;
 
         int xh_off, xs_off, xd_off, xg_off;
-        float[] x = new float[1];
+        float[] x;
     }
 
     static int LC3_DECODER_BUFFER_COUNT(int dt_us, int sr_hz) {
@@ -401,79 +625,21 @@ class Lc3 {
                 LC3_ND(dt_us, sr_hz) + LC3_NS(dt_us, sr_hz);
     }
 
-    /**
-     * Bandwidth, mapped to Nyquist frequency of sampleRates
-     */
-    enum BandWidth {
-        NB(_8K),
-        WB(_16K),
-        SSWB(_24K),
-        SWB(_32K),
-        FB(_48K),
+//#endregion
 
-        FB_HR(_48K_HR),
-        UB_HR(_96K_HR);
-
-        final SRate sr;
-
-        BandWidth(SRate sr) {
-            this.sr = sr;
-        }
-    }
-
-    interface TriConsumer<T, U, V> {
-
-        void accept(T t, U u, V v);
-    }
-
-    interface TetraConsumer<T, U, V, W> {
-
-        void accept(T t, U u, V v, W w);
-    }
-
-    interface PentaConsumer<T, U, V, W, X> {
-
-        void accept(T t, U u, V v, W w, X x);
-    }
-
-    interface HexaConsumer<T, U, V, W, X, Y> {
-
-        void accept(T t, U u, V v, W w, X x, Y y);
-    }
-
-    interface DecaConsumer<T, U, V, W, X, Y, Z, A, B, C> {
-
-        void accept(T t, U u, V v, W w, X x, Y y, Z z, A a, B b, C c);
-    }
-
-    /**
-     * Complex floating point number
-     */
-    static class Complex {
-
-        float re;
-        float im;
-
-        Complex() {
-        }
-
-        Complex(float re, float im) {
-            this.re = re;
-            this.im = im;
-        }
-    }
+//#region lc3.c
 
     /**
      * Frame side data
      */
-    static class side_data {
+    static class Side {
 
         BandWidth bw;
         boolean pitch_present;
-        lc3_ltpf_data ltpf;
+        Ltpf ltpf = new Ltpf();
         Sns sns;
-        Tns tns;
-        Spec spec;
+        Tns tns = new Tns();
+        Spec spec = new Spec();
     }
 
     //
@@ -520,7 +686,7 @@ class Lc3 {
         Duration dt = resolve_dt(dt_us, hrmode);
         SRate sr = resolve_srate(sr_hz, hrmode);
 
-        if (dt.ordinal() >= Duration.values().length || sr.ordinal() >= SRate.values().length)
+        if (dt == null || sr == null)
             return -1;
 
         return lc3_ns(dt, sr);
@@ -537,8 +703,7 @@ class Lc3 {
         Duration dt = resolve_dt(dt_us, hrmode);
         SRate sr = resolve_srate(sr_hz, hrmode);
 
-        if (dt.ordinal() >= Duration.values().length || sr.ordinal() >= SRate.values().length
-                || nchannels < 1 || nchannels > 8 || bitrate < 0)
+        if (dt == null || sr == null || nchannels < 1 || nchannels > 8 || bitrate < 0)
             return -1;
 
         bitrate = clip(bitrate, 0, 8 * LC3_HR_MAX_BITRATE);
@@ -567,7 +732,7 @@ class Lc3 {
         Duration dt = resolve_dt(dt_us, hrmode);
         SRate sr = resolve_srate(sr_hz, hrmode);
 
-        if (dt.ordinal() >= Duration.values().length || sr.ordinal() >= SRate.values().length || nbytes < 0)
+        if (dt == null || sr == null || nbytes < 0)
             return -1;
 
         return (int) Math.min(((long) nbytes * 3200 + dt.ordinal()) / (1 + dt.ordinal()), Integer.MAX_VALUE);
@@ -584,7 +749,7 @@ class Lc3 {
         Duration dt = resolve_dt(dt_us, hrmode);
         SRate sr = resolve_srate(sr_hz, hrmode);
 
-        if (dt.ordinal() >= Duration.values().length || sr.ordinal() >= SRate.values().length)
+        if (dt == null || sr == null)
             return -1;
 
         return 2 * lc3_nd(dt, sr) - lc3_ns(dt, sr);
@@ -599,105 +764,13 @@ class Lc3 {
     //
 
     /**
-     * Input PCM Samples from signed 16 bits
-     *
-     * @param encoder Encoder state
-     * @param _pcm,    stride     Input PCM samples, and count between two consecutives
-     */
-    static void load_s16(lc3_encoder encoder, byte[] _pcm, int stride) {
-        ShortBuffer pcm = ByteBuffer.wrap(_pcm).asShortBuffer();
-
-        Duration dt = encoder.dt;
-        SRate sr = encoder.sr_pcm;
-
-        int xt = encoder.xt_off; // encoder.x
-        int xs = encoder.xs_off; // encoder.x
-        int ns = lc3_ns(dt, sr);
-
-        for (int i = 0; i < ns; i++/*, pcm += stride */) {
-            encoder.x[xt + i] = pcm.get();
-            encoder.x[xs + i] = pcm.get();
-        }
-    }
-
-    /**
-     * Input PCM Samples from signed 24 bits
-     *
-     * @param encoder Encoder state
-     * @param _pcm,    stride     Input PCM samples, and count between two consecutives
-     */
-    static void load_s24(lc3_encoder encoder, byte[] _pcm, int stride) {
-        IntBuffer pcm = ByteBuffer.wrap(_pcm).asIntBuffer();
-
-        Duration dt = encoder.dt;
-        SRate sr = encoder.sr_pcm;
-
-        int xt = encoder.xt_off; // encoder.x
-        int xs = encoder.xs_off; // encoder.x
-        int ns = lc3_ns(dt, sr);
-
-        for (int i = 0; i < ns; i++/*, pcm += stride */) {
-            encoder.x[xt + i] = pcm.get() >> 8;
-            encoder.x[xs + i] = lc3_ldexpf(pcm.get(), -8);
-        }
-    }
-
-    /**
-     * Input PCM Samples from signed 24 bits packed
-     *
-     * @param encoder Encoder state
-     * @param _pcm,    stride     Input PCM samples, and count between two consecutives
-     */
-    static void load_s24_3le(lc3_encoder encoder, byte[] _pcm, int stride) {
-        byte[] pcm = _pcm;
-
-        Duration dt = encoder.dt;
-        SRate sr = encoder.sr_pcm;
-
-        int xt = encoder.xt_off; // encoder.x
-        int xs = encoder.xs_off; // encoder.x
-        int ns = lc3_ns(dt, sr);
-
-        for (int i = 0; i < ns; i++/*, pcm += 3 * stride */) {
-            int in = ((int) pcm[0] << 8) |
-                    ((int) pcm[1] << 16) |
-                    ((int) pcm[2] << 24);
-
-            encoder.x[xt + i] = in >> 16;
-            encoder.x[xs + i] = lc3_ldexpf(in, -16);
-        }
-    }
-
-    /**
-     * Input PCM Samples from float 32 bits
-     *
-     * @param encoder Encoder state
-     * @param _pcm,    stride     Input PCM samples, and count between two consecutives
-     */
-    static void load_float(lc3_encoder encoder, byte[] _pcm, int stride) {
-        FloatBuffer pcm = ByteBuffer.wrap(_pcm).asFloatBuffer();
-
-        Duration dt = encoder.dt;
-        SRate sr = encoder.sr_pcm;
-
-        int xt = encoder.xt_off; // encoder.x
-        int xs = encoder.xs_off; // encoder.x
-        int ns = lc3_ns(dt, sr);
-
-        for (int i = 0; i < ns; i++/* , pcm += stride */) {
-            encoder.x[xs + i] = lc3_ldexpf(pcm.get(), 15);
-            encoder.x[xt + i] = LC3_SAT16((int) encoder.x[xs + i]);
-        }
-    }
-
-    /**
      * Frame Analysis
      *
      * @param encoder Encoder state
-     * @param nbytes  Size in bytes of the frame
+     * @param nBytes  Size in bytes of the frame
      * @param side    Return frame data
      */
-    static void analyze(lc3_encoder encoder, int nbytes, side_data side) {
+    static void analyze(Encoder encoder, int nBytes, Side side) {
         Duration dt = encoder.dt;
         SRate sr = encoder.sr;
         SRate sr_pcm = encoder.sr_pcm;
@@ -712,9 +785,9 @@ class Lc3 {
 
         // Temporal
 
-        boolean att = lc3_attdet_run(dt, sr_pcm, nbytes, encoder.attdet, null /* encoder.x */, xt);
+        boolean att = lc3_attdet_run(dt, sr_pcm, nBytes, encoder.attdet, null /* encoder.x */, xt); // TODO null
 
-        side.pitch_present = lc3_ltpf_analyse(dt, sr_pcm, encoder.ltpf, null /* encoder.x */, xt, side.ltpf);
+        side.pitch_present = side.ltpf.lc3_ltpf_analyse(dt, sr_pcm, encoder.ltpf, null /* encoder.x */, xt); // TODO null
 
         System.arraycopy(encoder.x, xt + (ns - nt), encoder.x, xt - nt, nt);
         Arrays.fill(encoder.x, xt + (ns - nt), nt, 0);
@@ -723,19 +796,19 @@ class Lc3 {
 
         float[] e = new float[LC3_MAX_BANDS];
 
-        lc3_mdct_forward(dt, sr_pcm, sr, encoder.x, xs, encoder.x, xd, encoder.x, xf);
+        forward(dt, sr_pcm, sr, encoder.x, xs, encoder.x, xd, encoder.x, xf);
 
         boolean nn_flag = lc3_energy_compute(dt, sr, encoder.x, xf, e);
         if (nn_flag)
-            lc3_ltpf_disable(side.ltpf);
+            side.ltpf.lc3_ltpf_disable();
 
         side.bw = lc3_bwdet_run(dt, sr, e);
 
-        side.sns.lc3_sns_analyze(dt, sr, nbytes, e, att, encoder.x, xf, encoder.x, xf);
+        side.sns.lc3_sns_analyze(dt, sr, nBytes, e, att, encoder.x, xf, encoder.x, xf);
 
-        lc3_tns_analyze(dt, side.bw, nn_flag, nbytes, side.tns, encoder.x, xf);
+        side.tns.lc3_tns_analyze(dt, side.bw, nn_flag, nBytes, encoder.x, xf);
 
-        side.spec.lc3_spec_analyze(dt, sr, nbytes, side.pitch_present, side.tns, encoder.spec, encoder.x, xf);
+        side.spec.lc3_spec_analyze(dt, sr, nBytes, side.pitch_present, side.tns, encoder.spec, encoder.x, xf);
     }
 
     /**
@@ -746,39 +819,40 @@ class Lc3 {
      * @param nbytes  Target size of the frame (20 to 400)
      * @param buffer  Output bitstream buffer of `nbytes` size
      */
-    static void encode(lc3_encoder encoder, side_data side, int nbytes, byte[] buffer) {
-         Duration dt = encoder.dt;
-         SRate sr = encoder.sr;
+    static void encode(Encoder encoder, Side side, int nbytes, byte[] buffer, int offset) {
+        Duration dt = encoder.dt;
+        SRate sr = encoder.sr;
 
-         int xf = encoder.xs_off; // encoder.x
-         BandWidth bw = side.bw;
+        int xf = encoder.xs_off; // encoder.x
+        BandWidth bw = side.bw;
 
-         Bits bits = new Bits(Mode.WRITE, buffer, nbytes);
+        Bits bits = new Bits(Mode.WRITE, buffer, offset, nbytes);
 
-         lc3_bwdet_put_bw(bits, sr, bw);
+        lc3_bwdet_put_bw(bits, sr, bw);
 
-         side.spec.lc3_spec_put_side(bits, dt, sr);
+        side.spec.lc3_spec_put_side(bits, dt, sr);
 
-         lc3_tns_put_data(bits, side.tns);
+        side.tns.lc3_tns_put_data(bits);
 
-         bits.lc3_put_bit(side.pitch_present ? 1 : 0);
+        bits.lc3_put_bit(side.pitch_present ? 1 : 0);
 
-         side.sns.lc3_sns_put_data(bits);
+        side.sns.lc3_sns_put_data(bits);
 
-         if (side.pitch_present)
-             lc3_ltpf_put_data(bits, side.ltpf);
+        if (side.pitch_present)
+            side.ltpf.lc3_ltpf_put_data(bits);
 
-         side.spec.lc3_spec_encode(bits, dt, sr, bw, nbytes, encoder.x, xf);
+        side.spec.lc3_spec_encode(bits, dt, sr, bw, nbytes, encoder.x, xf);
 
-         bits.lc3_flush_bits();
-     }
+        bits.lc3_flush_bits();
+    }
 
     /**
      * Return size needed for an encoder
      */
     static int lc3_hr_encoder_size(boolean hrmode, int dt_us, int sr_hz) {
-        if (resolve_dt(dt_us, hrmode).ordinal() >= Duration.values().length ||
-                resolve_srate(sr_hz, hrmode).ordinal() >= SRate.values().length)
+        Duration dt = resolve_dt(dt_us, hrmode);
+        SRate sr = resolve_srate(sr_hz, hrmode);
+        if (dt == null || sr == null)
             return 0;
 
         return LC3_ENCODER_BUFFER_COUNT(dt_us, sr_hz) - 1;
@@ -792,7 +866,7 @@ class Lc3 {
      * Setup encoder
      * @param mem unused
      */
-    static lc3_encoder lc3_hr_setup_encoder(boolean hrmode, int dt_us, int sr_hz, int sr_pcm_hz, byte[] mem) {
+    static Encoder lc3_hr_setup_encoder(boolean hrmode, int dt_us, int sr_hz, int sr_pcm_hz, byte[] mem) {
         if (sr_pcm_hz <= 0)
             sr_pcm_hz = sr_hz;
 
@@ -800,13 +874,13 @@ class Lc3 {
         SRate sr = resolve_srate(sr_hz, hrmode);
         SRate sr_pcm = resolve_srate(sr_pcm_hz, hrmode);
 
-        if (dt.ordinal() >= Duration.values().length || sr_pcm.ordinal() >= SRate.values().length || sr.ordinal() > sr_pcm.ordinal() || mem == null)
+        if (dt == null || sr_pcm == null || sr != null && sr.ordinal() > sr_pcm.ordinal() || mem == null)
             return null;
 
         int ns = lc3_ns(dt, sr_pcm);
         int nt = lc3_nt(sr_pcm);
 
-        lc3_encoder encoder = new lc3_encoder();
+        Encoder encoder = new Encoder();
         encoder.dt = dt;
         encoder.sr = sr;
         encoder.sr_pcm = sr_pcm;
@@ -820,36 +894,30 @@ class Lc3 {
         return encoder;
     }
 
-    static lc3_encoder lc3_setup_encoder(int dt_us, int sr_hz, int sr_pcm_hz, byte[] mem) {
+    static Encoder lc3_setup_encoder(int dt_us, int sr_hz, int sr_pcm_hz, byte[] mem) {
         return lc3_hr_setup_encoder(false, dt_us, sr_hz, sr_pcm_hz, mem);
     }
-
-    static final Map<lc3_pcm_format, TriConsumer<lc3_encoder, byte[], Integer>> load = Map.of(
-            lc3_pcm_format.LC3_PCM_FORMAT_S16, Lc3::load_s16,
-            lc3_pcm_format.LC3_PCM_FORMAT_S24, Lc3::load_s24,
-            lc3_pcm_format.LC3_PCM_FORMAT_S24_3LE, Lc3::load_s24_3le,
-            lc3_pcm_format.LC3_PCM_FORMAT_FLOAT, Lc3::load_float
-    );
 
     /**
      * Encode a frame
      */
-    static int lc3_encode(lc3_encoder encoder, lc3_pcm_format fmt, final byte[] pcm, int stride, int nbytes, byte[] out) {
+    static int lc3_encode(Encoder encoder, lc3_pcm_format fmt, byte[] pcm, int stride, int nbytes, byte[] out, int outP) {
         // Check parameters
 
         if (encoder == null || nbytes < lc3_min_frame_bytes(encoder.dt, encoder.sr)
-                || nbytes > lc3_max_frame_bytes(encoder.dt, encoder.sr))
+                || nbytes > lc3_max_frame_bytes(encoder.dt, encoder.sr)) {
             return -1;
+        }
 
         // Processing
 
-        side_data side = new side_data();
+        Side side = new Side();
 
-        load.get(fmt).accept(encoder, pcm, stride);
+        fmt.load(encoder, pcm, stride);
 
         analyze(encoder, nbytes, side);
 
-        encode(encoder, side, nbytes, out);
+        encode(encoder, side, nbytes, out, outP);
 
         return 0;
     }
@@ -859,106 +927,14 @@ class Lc3 {
     //
 
     /**
-     * Output PCM Samples to signed 16 bits
-     *
-     * @param decoder Decoder state
-     * @param _pcm,   stride     Output PCM samples, and count between two consecutives
-     */
-    static void store_s16(lc3_decoder decoder, byte[] _pcm, int op, int stride) {
-        ShortBuffer pcm = ByteBuffer.wrap(_pcm, op, _pcm.length - op).asShortBuffer();
-
-        Duration dt = decoder.dt;
-        SRate sr = decoder.sr_pcm;
-
-        int xs = decoder.xs_off; // decoder.x
-        int ns = lc3_ns(dt, sr);
-
-        for (; ns > 0; ns--, xs++/*, pcm += stride */) {
-            int s = decoder.x[xs] >= 0 ? (int) (decoder.x[xs] + 0.5f) :(int) (decoder.x[xs] - 0.5f);
-            pcm.put((short) LC3_SAT16(s));
-        }
-    }
-
-    /**
-     * Output PCM Samples to signed 24 bits
-     *
-     * @param decoder Decoder state
-     * @param _pcm,   stride     Output PCM samples, and count between two consecutives
-     */
-    static void store_s24(lc3_decoder decoder, byte[] _pcm, int op, int stride) {
-        IntBuffer pcm = ByteBuffer.wrap(_pcm, op, _pcm.length - op).asIntBuffer();
-
-        Duration dt = decoder.dt;
-        SRate sr = decoder.sr_pcm;
-
-        int xs = decoder.xs_off; // decoder.x
-        int ns = lc3_ns(dt, sr);
-
-        for (; ns > 0; ns--, xs++/*, pcm += stride */) {
-            int s = decoder.x[xs] >= 0
-                    ? (int) (lc3_ldexpf(decoder.x[xs], 8) + 0.5f)
-                    : (int) (lc3_ldexpf(decoder.x[xs], 8) - 0.5f);
-            pcm.put(LC3_SAT24(s));
-        }
-    }
-
-    /**
-     * Output PCM Samples to signed 24 bits packed
-     *
-     * @param decoder Decoder state
-     * @param _pcm,   stride     Output PCM samples, and count between two consecutives
-     */
-    static void store_s24_3le(lc3_decoder decoder, byte[] _pcm, int op, int stride) {
-        byte[] pcm = Arrays.copyOfRange(_pcm, op, _pcm.length - op);
-
-        Duration dt = decoder.dt;
-        SRate sr = decoder.sr_pcm;
-
-        int xs = decoder.xs_off; // decoder.x
-        int ns = lc3_ns(dt, sr);
-
-        int pcmp = 0;
-        for (; ns > 0; ns--, xs++, pcmp += 3 * stride) {
-            int s = decoder.x[xs] >= 0 ? (int) (lc3_ldexpf(decoder.x[xs], 8)+0.5f)
-                             :(int) (lc3_ldexpf(decoder.x[xs], 8)-0.5f);
-
-            s = LC3_SAT24(s);
-            pcm[pcmp + 0] = (byte) ((s >> 0) & 0xff);
-            pcm[pcmp + 1] = (byte) ((s >> 8) & 0xff);
-            pcm[pcmp + 2] = (byte) ((s >> 16) & 0xff);
-        }
-    }
-
-    /**
-     * Output PCM Samples to float 32 bits
-     *
-     * @param decoder Decoder state
-     * @param _pcm,    stride     Output PCM samples, and count between two consecutives
-     */
-    static void store_float(lc3_decoder decoder, byte[] _pcm, int op, int stride) {
-        FloatBuffer pcm = ByteBuffer.wrap(_pcm, op, _pcm.length - op).asFloatBuffer();
-
-        Duration dt = decoder.dt;
-        SRate sr = decoder.sr_pcm;
-
-        int xs = decoder.xs_off; // decoder.x
-        int ns = lc3_ns(dt, sr);
-
-        for (; ns > 0; ns--, xs++/*, pcm += stride */) {
-            float s = lc3_ldexpf(decoder.x[xs], -15);
-            pcm.put(Math.min(Math.max(s, -1.f), 1.f));
-        }
-    }
-
-    /**
      * Decode bitstream
      *
      * @param decoder Decoder state
-     * @param data,   nbytes    Input bitstream buffer
+     * @param data,   nBytes    Input bitstream buffer
      * @param side    Return the side data
      * @return 0: Ok  < 0: Bitsream error detected
      */
-    static int decode(lc3_decoder decoder, byte[] data, int nbytes, side_data side) {
+    static int decode(Decoder decoder, byte[] data, int dataP, int nBytes, Side side) {
         Duration dt = decoder.dt;
         SRate sr = decoder.sr;
 
@@ -968,30 +944,34 @@ class Lc3 {
 
         int ret = 0;
 
-        Bits bits = new Bits(Bits.Mode.READ, (byte[]) data, nbytes);
+        Bits bits = new Bits(Mode.READ, data, dataP, nBytes);
 
         BandWidth[] bw = new BandWidth[1];
-        if ((ret = lc3_bwdet_get_bw(bits, sr, bw)) < 0)
+        if ((ret = lc3_bwdet_get_bw(bits, sr, bw)) < 0) {
             return ret;
+        }
         side.bw = bw[0];
 
-        if ((ret = side.spec.lc3_spec_get_side(bits, dt, sr)) < 0)
+        if ((ret = side.spec.lc3_spec_get_side(bits, dt, sr)) < 0) {
             return ret;
+        }
 
-        if ((ret = lc3_tns_get_data(bits, dt, side.bw, nbytes, side.tns)) < 0)
+        if ((ret = side.tns.lc3_tns_get_data(bits, dt, side.bw, nBytes)) < 0) {
             return ret;
+        }
 
         side.pitch_present = bits.lc3_get_bit() != 0;
 
         side.sns = new Sns(bits);
 
         if (side.pitch_present)
-            lc3_ltpf_get_data(bits, side.ltpf);
+            side.ltpf.lc3_ltpf_get_data(bits);
 
-        if ((ret = side.spec.lc3_spec_decode(bits, dt, sr, side.bw, nbytes, decoder.x, xf)) < 0)
+        if ((ret = side.spec.lc3_spec_decode(bits, dt, sr, side.bw, nBytes, decoder.x, xf)) < 0) {
             return ret;
+        }
 
-        Arrays.fill(decoder.x, xf + ne, ns - ne, 0);
+        Arrays.fill(decoder.x, xf + ne, (xf + ne) + (ns - ne), 0);
 
         return bits.lc3_check_bits();
     }
@@ -1001,9 +981,9 @@ class Lc3 {
      *
      * @param decoder Decoder state
      * @param side    Frame data, null performs PLC
-     * @param nbytes  Size in bytes of the frame
+     * @param nBytes  Size in bytes of the frame
      */
-    static void synthesize(lc3_decoder decoder, side_data side, int nbytes) {
+    static void synthesize(Decoder decoder, Side side, int nBytes) {
         Duration dt = decoder.dt;
         SRate sr = decoder.sr;
         SRate sr_pcm = decoder.sr_pcm;
@@ -1013,7 +993,7 @@ class Lc3 {
         int ne = lc3_ne(dt, sr);
 
         int xg = decoder.xg_off; // decoder.x
-        int xs = xf;
+        int xs = xf; // decoder.x
 
         int xd = decoder.xd_off; // decoder.x
         int xh = decoder.xh_off; // decoder.x
@@ -1023,23 +1003,23 @@ class Lc3 {
 
             decoder.plc.lc3_plc_suspend();
 
-            lc3_tns_synthesize(dt, bw, side.tns, decoder.x, xf);
+            side.tns.lc3_tns_synthesize(dt, bw, decoder.x, xf);
 
             side.sns.lc3_sns_synthesize(dt, sr, decoder.x, xf, decoder.x, xg);
 
-            lc3_mdct_inverse(dt, sr_pcm, sr, decoder.x, xg, decoder.x, xd, decoder.x, xs);
+            inverse(dt, sr_pcm, sr, decoder.x, xg, decoder.x, xd, decoder.x, xs);
 
         } else {
             decoder.plc.lc3_plc_synthesize(dt, sr, decoder.x, xg, decoder.x, xf);
 
-            Arrays.fill(decoder.x, xf + ne, ns - ne, 0);
+            Arrays.fill(decoder.x, xf + ne, (xf + ne) + (ns - ne), 0);
 
-            lc3_mdct_inverse(dt, sr_pcm, sr, decoder.x, xf, decoder.x, xd, decoder.x, xs);
+            inverse(dt, sr_pcm, sr, decoder.x, xf, decoder.x, xd, decoder.x, xs);
         }
 
-        if (lc3_hr(sr))
-            lc3_ltpf_synthesize(dt, sr_pcm, nbytes, decoder.ltpf,
-                    side != null & side.pitch_present ? side.ltpf : null, xh, decoder.x, xs);
+        if (!isHR(sr))
+            lc3_ltpf_synthesize(dt, sr_pcm, nBytes, decoder.ltpf,
+                    side != null && side.pitch_present ? side.ltpf : null, xh, decoder.x, xs);
     }
 
     /**
@@ -1047,22 +1027,22 @@ class Lc3 {
      *
      * @param decoder Decoder state
      */
-    static void complete(lc3_decoder decoder) {
+    static void complete(Decoder decoder) {
         Duration dt = decoder.dt;
         SRate sr_pcm = decoder.sr_pcm;
         int nh = lc3_nh(dt, sr_pcm);
         int ns = lc3_ns(dt, sr_pcm);
 
-        decoder.xs_off = decoder.xs_off - decoder.xh_off < nh ?
-                decoder.xs_off + ns : decoder.xh_off;
+        decoder.xs_off = decoder.xs_off - decoder.xh_off < nh ? decoder.xs_off + ns : decoder.xh_off;
     }
 
     /**
      * Return size needed for a decoder
      */
     static int lc3_hr_decoder_size(boolean hrmode, int dt_us, int sr_hz) {
-        if (resolve_dt(dt_us, hrmode).ordinal() >= Duration.values().length ||
-                resolve_srate(sr_hz, hrmode).ordinal() >= SRate.values().length)
+        Duration dt = resolve_dt(dt_us, hrmode);
+        SRate sr = resolve_srate(sr_hz, hrmode);
+        if (dt == null || sr == null)
             return 0;
 
         return LC3_DECODER_BUFFER_COUNT(dt_us, sr_hz) - 1;
@@ -1075,7 +1055,7 @@ class Lc3 {
     /**
      * Setup decoder
      */
-    static lc3_decoder lc3_hr_setup_decoder(boolean hrmode, int dt_us, int sr_hz, int sr_pcm_hz) {
+    static Decoder lc3_hr_setup_decoder(boolean hrmode, int dt_us, int sr_hz, int sr_pcm_hz) {
         if (sr_pcm_hz <= 0)
             sr_pcm_hz = sr_hz;
 
@@ -1083,16 +1063,14 @@ class Lc3 {
         SRate sr = resolve_srate(sr_hz, hrmode);
         SRate sr_pcm = resolve_srate(sr_pcm_hz, hrmode);
 
-        if (dt.ordinal() >= Duration.values().length || sr_pcm.ordinal() >= SRate.values().length ||
-                sr.ordinal() > sr_pcm.ordinal())
+        if (dt == null || sr_pcm == null || (sr != null && sr.ordinal() > sr_pcm.ordinal()))
             return null;
 
-        lc3_decoder decoder = new lc3_decoder();
         int nh = lc3_nh(dt, sr_pcm);
         int ns = lc3_ns(dt, sr_pcm);
         int nd = lc3_nd(dt, sr_pcm);
 
-        decoder = new lc3_decoder();
+        Decoder decoder = new Decoder();
         decoder.dt = dt;
         decoder.sr = sr;
         decoder.sr_pcm = sr_pcm;
@@ -1105,48 +1083,44 @@ class Lc3 {
         decoder.plc = new Plc();
         decoder.plc.lc3_plc_reset();
 
-        Arrays.fill(decoder.x, 0, LC3_DECODER_BUFFER_COUNT(dt_us, sr_pcm_hz), (float) 0);
+        decoder.x = new float[LC3_DECODER_BUFFER_COUNT(dt_us, sr_pcm_hz)];
+Debug.println(decoder.x.length);
 
         return decoder;
     }
 
-    static lc3_decoder lc3_setup_decoder(int dt_us, int sr_hz, int sr_pcm_hz) {
+    static Decoder lc3_setup_decoder(int dt_us, int sr_hz, int sr_pcm_hz) {
         return lc3_hr_setup_decoder(false, dt_us, sr_hz, sr_pcm_hz);
     }
-
-    static Map<lc3_pcm_format, TetraConsumer<lc3_decoder, byte[], Integer, Integer>> store = Map.of(
-            lc3_pcm_format.LC3_PCM_FORMAT_S16, Lc3::store_s16,
-            lc3_pcm_format.LC3_PCM_FORMAT_S24, Lc3::store_s24,
-            lc3_pcm_format.LC3_PCM_FORMAT_S24_3LE, Lc3::store_s24_3le,
-            lc3_pcm_format.LC3_PCM_FORMAT_FLOAT, Lc3::store_float
-    );
 
     /**
      * Decode a frame
      */
-    static boolean lc3_decode(lc3_decoder decoder, byte[] in, int ip, int nbytes, lc3_pcm_format fmt, byte[] pcm, int op, int stride) {
+    static boolean lc3_decode(Decoder decoder, byte[] in, int inp, int nBytes, lc3_pcm_format fmt, byte[] pcm, int op, int stride) {
 
         // Check parameters
 
         if (decoder == null)
             return false;
 
-        if (in != null & (nbytes < LC3_MIN_FRAME_BYTES ||
-                nbytes > lc3_max_frame_bytes(decoder.dt, decoder.sr)))
+        if (in != null && (nBytes < LC3_MIN_FRAME_BYTES ||
+                nBytes > lc3_max_frame_bytes(decoder.dt, decoder.sr)))
             return false;
 
         // Processing
 
-        side_data side = new side_data();
+        Side side = new Side();
 
-        boolean ret = in == null || (decode(decoder, in, nbytes, side) < 0);
+        boolean ret = in == null || decode(decoder, in, inp, nBytes, side) < 0;
 
-        synthesize(decoder, ret ? null : side, nbytes);
+        synthesize(decoder, ret ? null : side, nBytes);
 
-        store.get(fmt).accept(decoder, pcm, op, stride);
+        fmt.store(decoder, pcm, op, stride);
 
         complete(decoder);
 
         return ret;
     }
+
+//#endregion
 }

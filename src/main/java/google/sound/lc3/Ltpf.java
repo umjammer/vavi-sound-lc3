@@ -18,20 +18,16 @@ package google.sound.lc3;
 
 import java.util.Arrays;
 import java.util.Map;
-import java.util.function.Consumer;
 
 import google.sound.lc3.Lc3.DecaConsumer;
-import google.sound.lc3.Lc3.HexaConsumer;
-import google.sound.lc3.Lc3.PentaConsumer;
 import google.sound.lc3.Lc3.Duration;
+import google.sound.lc3.Lc3.HexaConsumer;
 import google.sound.lc3.Lc3.SRate;
-import vavi.util.win32.WAVE.data;
 
 import static google.sound.lc3.Lc3.Duration._10M;
 import static google.sound.lc3.Lc3.Duration._2M5;
 import static google.sound.lc3.Lc3.Duration._5M;
 import static google.sound.lc3.Lc3.Duration._7M5;
-import static google.sound.lc3.Lc3.isHR;
 import static google.sound.lc3.Lc3.SRate._16K;
 import static google.sound.lc3.Lc3.SRate._24K;
 import static google.sound.lc3.Lc3.SRate._32K;
@@ -39,6 +35,7 @@ import static google.sound.lc3.Lc3.SRate._48K;
 import static google.sound.lc3.Lc3.SRate._48K_HR;
 import static google.sound.lc3.Lc3.SRate._8K;
 import static google.sound.lc3.Lc3.SRate._96K_HR;
+import static google.sound.lc3.Lc3.isHR;
 import static google.sound.lc3.Tables.LC3_MAX_SRATE_HZ;
 import static google.sound.lc3.Tables.lc3_nh;
 import static google.sound.lc3.Tables.lc3_ns;
@@ -59,7 +56,7 @@ class Ltpf {
         int pitch;
         float[] nc = new float[2];
 
-        Hp50State hp50;
+        Hp50State hp50 = new Hp50State();
         short[] x_12k8 = new short[384];
         short[] x_6k4 = new short[178];
         int tc;
@@ -421,14 +418,14 @@ class Ltpf {
     /**
      * LTPF Resample to 12.8 KHz implementations for each sampleRates
      */
-    private static Map<SRate, HexaConsumer<Hp50State, short[], Integer, short[], Integer, Integer>> resample_12k8 = Map.of(
-            _8K, Ltpf::resample_8k_12k8,
-            _16K, Ltpf::resample_16k_12k8,
-            _24K, Ltpf::resample_24k_12k8,
-            _32K, Ltpf::resample_32k_12k8,
-            _48K, Ltpf::resample_48k_12k8,
-            _48K_HR, Ltpf::resample_48k_12k8,
-            _96K_HR, Ltpf::resample_96k_12k8
+    private static final Map<SRate, HexaConsumer<Hp50State, short[], Integer, short[], Integer, Integer>> resample_12k8 = Map.of(
+            _8K, google.sound.lc3.Ltpf::resample_8k_12k8,
+            _16K, google.sound.lc3.Ltpf::resample_16k_12k8,
+            _24K, google.sound.lc3.Ltpf::resample_24k_12k8,
+            _32K, google.sound.lc3.Ltpf::resample_32k_12k8,
+            _48K, google.sound.lc3.Ltpf::resample_48k_12k8,
+            _48K_HR, google.sound.lc3.Ltpf::resample_48k_12k8,
+            _96K_HR, google.sound.lc3.Ltpf::resample_96k_12k8
     );
 
     //
@@ -481,7 +478,7 @@ class Ltpf {
      * @param x_max Return the maximum value
      * @return Return the argument of the maximum
      */
-    private static int argmax(final float[] x, int xp, int n, float[] x_max) {
+    private static int argmax(float[] x, int xp, int n, float[] x_max) {
         int arg = 0;
 
         x_max[0] = x[xp + (arg = 0)];
@@ -500,7 +497,7 @@ class Ltpf {
      * @param w_incr Increment of the weight
      * @param x_max  Return the maximum not weighted value
      */
-    private static int argmax_weighted(final float[] x, int n, float w_incr, float[] x_max) {
+    private static int argmax_weighted(float[] x, int n, float w_incr, float[] x_max) {
         int arg;
 
         float xw_max = (x_max[0] = x[arg = 0]);
@@ -653,16 +650,18 @@ class Ltpf {
         for (int i = 1; i <= 3; i++) {
             float d;
 
-            if (e >= 127 && (((i & 1) != 0) | (e >= 157)))
+            if (e >= 127 && (((i & 1) != 0) || (e >= 157)))
                 continue;
 
-            if ((d = interpolate_corr(r, re, i)) > dm)
+            if ((d = interpolate_corr(r, re, i)) > dm) {
                 dm = d;
-            f = i;
+                f = i;
+            }
 
-            if (e > 32 && (d = interpolate_corr(r, re, -i)) > dm)
+            if (e > 32 && (d = interpolate_corr(r, re, -i)) > dm) {
                 dm = d;
-            f = -i;
+                f = -i;
+            }
         }
 
         e -= (f < 0) ? 1 : 0;
@@ -672,11 +671,10 @@ class Ltpf {
         return e < 127 ? 4 * e + f - 128 : e < 157 ? 2 * e + (f >> 1) + 126 : e + 283;
     }
 
-    static class lc3_ltpf_data {
+    // lc3_ltpf_data
 
-        boolean active;
-        int pitch_index;
-    }
+    boolean active;
+    int pitch_index;
 
     //
     // Encoding
@@ -693,10 +691,9 @@ class Ltpf {
      * @param sr   sampleRate of the frame
      * @param ltpf Context of analysis
      * @param x    [-d..-1] Previous, [0..ns-1] Current samples
-     * @param data Return bitstream data
      * @return True when pitch present, False otherwise
      */
-    static boolean lc3_ltpf_analyse(Duration dt, SRate sr, Analysis ltpf, short[] x, int xp, lc3_ltpf_data data) {
+    boolean lc3_ltpf_analyse(Duration dt, SRate sr, Analysis ltpf, short[] x, int xp) {
 
         // Resampling to 12.8 KHz
 
@@ -744,7 +741,7 @@ class Ltpf {
         if (pitch_present) {
             short[] u = new short[128], v = new short[128];
 
-            data.pitch_index = refine_pitch(ltpf.x_12k8, x_12k8, n_12k8, tc[0], pitch);
+            this.pitch_index = refine_pitch(ltpf.x_12k8, x_12k8, n_12k8, tc[0], pitch);
 
             interpolate(ltpf.x_12k8, x_12k8, n_12k8, 0, u);
             interpolate(ltpf.x_12k8, x_12k8 - (pitch[0] >> 2), n_12k8, pitch[0] & 3, v);
@@ -759,16 +756,16 @@ class Ltpf {
             int pitch_diff = Math.max(pitch[0], ltpf.pitch) - Math.min(pitch[0], ltpf.pitch);
             float nc_diff = nc - ltpf.nc[0];
 
-            data.active = !isHR(sr) && pitch_present &&
+            this.active = !isHR(sr) && pitch_present &&
                     ((nc > 0.9f) || (nc > 0.84f && pitch_diff < 8 && nc_diff > -0.1f));
 
         } else {
-            data.active = !isHR(sr) && pitch_present &&
+            this.active = !isHR(sr) && pitch_present &&
                     ((dt == _10M || ltpf.nc[1] > 0.94f) &&
                             (ltpf.nc[0] > 0.94f && nc > 0.94f));
         }
 
-        ltpf.active = data.active;
+        ltpf.active = this.active;
         ltpf.pitch = pitch[0];
         ltpf.nc[1] = ltpf.nc[0];
         ltpf.nc[0] = nc;
@@ -778,11 +775,9 @@ class Ltpf {
 
     /**
      * LTPF disable
-     *
-     * @param data LTPF data, disabled activation on return
      */
-    static void lc3_ltpf_disable(lc3_ltpf_data data) {
-        data.active = false;
+    void lc3_ltpf_disable() {
+        this.active = false;
     }
 
     /**
@@ -799,11 +794,10 @@ class Ltpf {
      * Put bitstream data
      *
      * @param bits Bitstream context
-     * @param data LTPF data
      */
-    static void lc3_ltpf_put_data(Bits bits, final lc3_ltpf_data data) {
-        bits.lc3_put_bit(data.active ? 1 : 0);
-        bits.lc3_put_bits(data.pitch_index, 9);
+    void lc3_ltpf_put_data(Bits bits) {
+        bits.lc3_put_bit(this.active ? 1 : 0);
+        bits.lc3_put_bits(this.pitch_index, 9);
     }
 
     //
@@ -814,11 +808,10 @@ class Ltpf {
      * Get bitstream data
      *
      * @param bits Bitstream context
-     * @param data Return bitstream data
      */
-    static void lc3_ltpf_get_data(Bits bits, lc3_ltpf_data data) {
-        data.active = bits.lc3_get_bit() != 0;
-        data.pitch_index = bits.lc3_get_bits(9);
+    void lc3_ltpf_get_data(Bits bits) {
+        this.active = bits.lc3_get_bit() != 0;
+        this.pitch_index = bits.lc3_get_bits(9);
     }
 
     //
@@ -904,24 +897,24 @@ class Ltpf {
         synthesize_template(xh, nh, lag, x0, x0p, x, xp, n, c, 4, fade);
     }
 
-    private static void synthesize_6(int /* float[] */  xh, int nh, int lag, float[] x0, int x0p, float[] x, int xp, int n, float[] c, int fade) {
+    private static void synthesize_6(int /* float[] */ xh, int nh, int lag, float[] x0, int x0p, float[] x, int xp, int n, float[] c, int fade) {
         synthesize_template(xh, nh, lag, x0, x0p, x, xp, n, c, 6, fade);
     }
 
-    private static void synthesize_8(int /* float[] */  xh, int nh, int lag, float[] x0, int x0p, float[] x, int xp, int n, float[] c, int fade) {
+    private static void synthesize_8(int /* float[] */ xh, int nh, int lag, float[] x0, int x0p, float[] x, int xp, int n, float[] c, int fade) {
         synthesize_template(xh, nh, lag, x0, x0p, x, xp, n, c, 8, fade);
     }
 
-    private static void synthesize_12(int /* float[] */  xh, int nh, int lag, float[] x0, int x0p, float[] x, int xp, int n, float[] c, int fade) {
+    private static void synthesize_12(int /* float[] */ xh, int nh, int lag, float[] x0, int x0p, float[] x, int xp, int n, float[] c, int fade) {
         synthesize_template(xh, nh, lag, x0, x0p, x, xp, n, c, 12, fade);
     }
 
     static Map<SRate, DecaConsumer<Integer, Integer, Integer, float[], Integer, float[], Integer, Integer, float[], Integer>> synthesize = Map.of(
-            _8K, Ltpf::synthesize_4,
-            _16K, Ltpf::synthesize_4,
-            _24K, Ltpf::synthesize_6,
-            _32K, Ltpf::synthesize_8,
-            _48K, Ltpf::synthesize_12
+            _8K, google.sound.lc3.Ltpf::synthesize_4,
+            _16K, google.sound.lc3.Ltpf::synthesize_4,
+            _24K, google.sound.lc3.Ltpf::synthesize_6,
+            _32K, google.sound.lc3.Ltpf::synthesize_8,
+            _48K, google.sound.lc3.Ltpf::synthesize_12
     );
 
     /**
@@ -939,7 +932,7 @@ class Ltpf {
      * @param x      Samples to proceed in the ring buffer, filtered as output
      */
     static void lc3_ltpf_synthesize(Duration dt, SRate sr, int nbytes,
-                             Synthesis ltpf, lc3_ltpf_data data,
+                             Synthesis ltpf, Ltpf data,
                              int /* float[] */ xh, float[] x, int xp) {
 
         int nh = lc3_ns(dt, sr) + lc3_nh(dt, sr);
@@ -1006,6 +999,8 @@ class Ltpf {
         ltpf.pitch = pitch;
         System.arraycopy(c, 0, ltpf.c, 0, 2 * w);
     }
+
+//#region table.c
 
     /**
      * Long Term Postfilter Synthesis
@@ -1105,4 +1100,6 @@ class Ltpf {
                             1.12464799e-01f, 6.54704494e-02f, 2.81970232e-02f, 7.04140493e-03f},
             }
     );
+
+//#endregion
 }

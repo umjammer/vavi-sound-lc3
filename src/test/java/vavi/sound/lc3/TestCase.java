@@ -22,6 +22,7 @@ import javax.sound.sampled.Mixer;
 import javax.sound.sampled.SourceDataLine;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import vavi.sound.SoundUtil;
 import vavi.util.Debug;
@@ -32,13 +33,13 @@ import static vavix.util.DelayedWorker.later;
 
 
 /**
- * Test1.
+ * TestCase.
  *
  * @author <a href="mailto:umjammer@gmail.com">Naohide Sano</a> (nsano)
  * @version 0.00 2023-02-05 nsano initial version <br>
  */
 @PropsEntity(url = "file:local.properties")
-class Test1 {
+class TestCase {
 
     static boolean localPropertiesExists() {
         return Files.exists(Paths.get("local.properties"));
@@ -54,15 +55,12 @@ class Test1 {
         }
     }
 
-    static long time;
-    static double volume;
+    static long time = System.getProperty("vavi.test", "").equals("ide") ? 1000 * 1000 : 10 * 1000;
 
-    static {
-        time = System.getProperty("vavi.test", "").equals("ide") ? 1000 * 1000 : 10 * 1000;
-        volume = Double.parseDouble(System.getProperty("vavi.test.volume",  "0.2"));
-    }
+    static double volume = Double.parseDouble(System.getProperty("vavi.test.volume",  "0.2"));
 
     @Test
+    @DisplayName("list available lines")
     void test0() throws Exception {
         Mixer.Info[] mixers = AudioSystem.getMixerInfo();
         for (Mixer.Info mixerInfo : mixers){
@@ -89,7 +87,7 @@ class Test1 {
         InputStream is = new BufferedInputStream(Files.newInputStream(p));
         Lc3Plus lc3Plus = new Lc3Plus(is);
 
-        AudioFormat af = new AudioFormat(lc3Plus.getSampleRate(), 16, lc3Plus.getChannels(), true, false);
+        var af = new AudioFormat(lc3Plus.getSampleRate(), 16, lc3Plus.getChannels(), true, false);
 Debug.println(af);
         SourceDataLine line = AudioSystem.getSourceDataLine(af);
         line.open();

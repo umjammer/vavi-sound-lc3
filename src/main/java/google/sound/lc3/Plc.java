@@ -55,8 +55,6 @@ class Plc {
      * @param y  Return emulated ones
      */
     void lc3_plc_synthesize(Duration dt, SRate sr, float[] x, int xp, float[] y, int yp) {
-        int seed = this.seed;
-        float alpha = this.alpha;
         int ne = lc3_ne(dt, sr);
 
         alpha *= (this.count < 4 ? 1.0f : this.count < 8 ? 0.9f : 0.85f);
@@ -66,8 +64,6 @@ class Plc {
             y[yp + i] = alpha * ((seed & 0x8000) != 0 ? -x[xp + i] : x[xp + i]);
         }
 
-        this.seed = seed;
-        this.alpha = alpha;
         this.count++;
     }
 }

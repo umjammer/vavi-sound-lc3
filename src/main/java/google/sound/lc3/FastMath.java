@@ -17,6 +17,7 @@
 package google.sound.lc3;
 
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 
 
 /**
@@ -92,29 +93,29 @@ class FastMath {
         // Note that `fast-math` compiler option leads to rounding error,
         // disable optimisation with `volatile`.
 
-        ByteBuffer v = ByteBuffer.allocate(Integer.BYTES);
+        ByteBuffer v = ByteBuffer.allocate(Integer.BYTES).order(ByteOrder.LITTLE_ENDIAN);
 
         v.putFloat(x + 0x1.8p20f);
-        int k = v.getInt();
-        x -= v.getFloat() - 0x1.8p20f;
+        int k = v.getInt(0);
+        x -= v.getFloat(0) - 0x1.8p20f;
 
         // Compute 2^x, with |x| < 1
         // Perform polynomial approximation in range -0.5/8 to 0.5/8,
         // and muplity by precomputed value of 2^(i/8), i in [0:7]
 
-        ByteBuffer y = ByteBuffer.allocate(Integer.BYTES);
+        ByteBuffer y = ByteBuffer.allocate(Integer.BYTES).order(ByteOrder.LITTLE_ENDIAN);
 
-        y.putFloat((p[0]) * x);
-        y.putFloat((y.getFloat() + p[1]) * x);
-        y.putFloat((y.getFloat() + p[2]) * x);
-        y.putFloat((y.getFloat() + p[3]) * x);
-        y.putFloat((y.getFloat() + 1.f) * e[k & 7]);
+        y.putFloat(0, (p[0]) * x);
+        y.putFloat(0, (y.getFloat(0) + p[1]) * x);
+        y.putFloat(0, (y.getFloat(0) + p[2]) * x);
+        y.putFloat(0, (y.getFloat(0) + p[3]) * x);
+        y.putFloat(0, (y.getFloat(0) + 1.f) * e[k & 7]);
 
         // Add the exponent
 
-        y.putInt(y.getInt() + (k >> 3) << LC3_IEEE754_EXP_SHL);
+        y.putInt(0, y.getInt(0) + ((k >> 3) << LC3_IEEE754_EXP_SHL));
 
-        return y.getFloat();
+        return y.getFloat(0);
     }
 
     private static final float[] c = {-1.29479677f, 5.11769018f, -8.42295281f, 8.10557963f, -3.50567360f};

@@ -16,7 +16,7 @@
 
 package google.sound.lc3;
 
-
+import java.util.Arrays;
 import java.util.stream.IntStream;
 
 import static google.sound.lc3.Bits.Mode.READ;
@@ -67,7 +67,6 @@ class Bits {
     /**
      * Bitstream mode
      */
-
     enum Mode {
         READ,
         WRITE,
@@ -77,7 +76,7 @@ class Bits {
      * Arithmetic coder symbol interval
      * The model split the interval in 17 symbols
      */
-    static class AcSymbol {
+    private static class AcSymbol {
 
         short low;
         short range;
@@ -94,34 +93,44 @@ class Bits {
 
         public AcModel(int[][] ii) {
             this.s = new AcSymbol[ii.length];
-            IntStream.range(0, s.length).forEach(i -> {
-                this.s[i] = new AcSymbol(ii[i][0], ii[i][1]);
-            });
+            IntStream.range(0, s.length).forEach(i -> this.s[i] = new AcSymbol(ii[i][0], ii[i][1]));
         }
     }
 
-    /**
+    /*
      * Bitstream context
      */
 
     private static final int LC3_ACCU_BITS = 8 * Integer.BYTES;
 
+    /**
+     * struct lc3_bits_accu
+     */
     private static class Accu {
+
+        Buffer buffer;
+
+        /**
+         * @param buffer Bitstream buffer
+         * @param mode Bitstream mode
+         */
+        Accu(Buffer buffer, Mode mode) {
+            this.buffer = buffer;
+            this.n = mode == READ ? LC3_ACCU_BITS : 0;
+        }
 
         int v;
         int n, nover;
 
         /**
          * Flush the bits accumulator
-         *
-         * @param buffer Bitstream buffer
          */
-        void flush(Buffer buffer) {
-            int nbytes = Math.min(n >> 3, Math.max(buffer.pBw - buffer.pFw, 0));
+        void flush() {
+            int nbytes = Math.min(n >>> 3, Math.max(buffer.pBw - this.buffer.pFw, 0));
 
             n -= 8 * nbytes;
 
-            for (; nbytes != 0; v >>= 8, nbytes--)
+            for (; nbytes != 0; v >>>= 8, nbytes--)
                 buffer.buffer[--buffer.pBw] = (byte) (v & 0xff);
 
             if (n >= 8)
@@ -130,32 +139,126 @@ class Bits {
 
         /**
          * Load the accumulator
-         *
-         * @param buffer Bitstream buffer
          */
-        private void load(Buffer buffer) {
+        void load() {
             int nBytes = Math.min(n >> 3, buffer.pBw - buffer.start);
 
             n -= 8 * nBytes;
 
-            int p = buffer.pBw;
             for (; nBytes != 0; nBytes--) {
-                v >>= 8;
-                v |= (int) buffer.buffer[buffer.pFw + --p] << (LC3_ACCU_BITS - 8);
+                v >>>= 8;
+                v |= (buffer.buffer[--buffer.pBw] & 0xff) << (LC3_ACCU_BITS - 8);
             }
 
             if (n >= 8) {
                 nover = Math.min(nover + n, LC3_ACCU_BITS);
-                v >>= n;
+                v >>>= n;
                 n = 0;
             }
+        }
+
+        /**
+         * Write from 1 to 32 bits,
+         * exceeding the capacity of the accumulator
+         */
+        void put_bits_generic(int v, int n) {
+
+            // Fulfill accumulator and flush
+
+            int n1 = Math.min(LC3_ACCU_BITS - this.n, n);
+            if (n1 != 0) {
+                this.v |= v << this.n;
+                this.n = LC3_ACCU_BITS;
+            }
+
+            this.flush();
+
+            // Accumulate remaining bits
+
+            this.v = v >>> n1;
+            this.n = n - n1;
+        }
+
+        /**
+         * Read from 1 to 32 bits,
+         * exceeding the capacity of the accumulator
+         */
+        int get_bits_generic(int n) {
+
+            // Fulfill accumulator and read
+
+            this.load();
+
+            int n1 = Math.min(LC3_ACCU_BITS - this.n, n);
+            int v = (this.v >>> this.n) & ((1 << n1) - 1);
+            this.n += n1;
+
+            // Second round
+
+            int n2 = n - n1;
+
+            if (n2 != 0) {
+                this.load();
+
+                v |= ((this.v >>> this.n) & ((1 << n2) - 1)) << n1;
+                this.n += n2;
+            }
+            return v;
+        }
+
+        /**
+         * Put from 1 to 32 bits
+         *
+         * @param v Value, in range 0 to 2^n - 1
+         * @param n bits count (1 to 32)
+         */
+        void put_bits(int v, int n) {
+            if (this.n + n <= LC3_ACCU_BITS) {
+                this.v |= v << this.n;
+                this.n += n;
+            } else {
+                this.put_bits_generic(v, n);
+            }
+        }
+
+        /**
+         * Get from 1 to 32 bits
+         *
+         * @param n Number of bits to read (1 to 32)
+         * @return The value read
+         */
+        int get_bits(int n) {
+            if (this.n + n <= LC3_ACCU_BITS) {
+                int v = (this.v >>> this.n) & ((1 << n) - 1);
+                this.n += n;
+                return v;
+            } else {
+                return this.get_bits_generic(n);
+            }
+        }
+
+        /** */
+        void terminate() {
+            int nLeft = buffer.pBw - buffer.pFw;
+            for (int n = 8 * nLeft - this.n; n > 0; n -= 32)
+                put_bits(0, Math.min(n, 32));
+
+            this.flush();
         }
     }
 
     private static final int LC3_AC_BITS = 24;
 
+    /**
+     * struct lc3_bits_ac
+     */
     private static class Ac {
+
         Buffer buffer;
+
+        /**
+         * @param buffer Bitstream buffer
+         */
         Ac(Buffer buffer) {
             this.buffer = buffer;
             this.range = 0xff_ffff;
@@ -176,7 +279,7 @@ class Bits {
 
             int r = range;
             while (r != 0) {
-                r >>= 1;
+                r >>>= 1;
                 nBits++;
             }
 
@@ -195,12 +298,11 @@ class Bits {
         /**
          * Arithmetic coder put byte
          *
-         * @param _byte  Byte to output
+         * @param _byte Byte to output
          */
         private void put(int _byte) {
-            int p = 0;
-            if (p++ < buffer.end)
-                buffer.buffer[buffer.pFw + p++] = (byte) _byte;
+            if (buffer.pFw < buffer.end)
+                buffer.buffer[buffer.pFw++] = (byte) (_byte & 0xff);
         }
 
         /**
@@ -214,12 +316,12 @@ class Bits {
                 for (; carryCount > 0; carryCount--)
                     put(carry != 0 ? 0x00 : 0xff);
 
-                cache = low >> 16;
+                cache = low >>> 16;
                 carry = 0;
             } else
                 carryCount++;
 
-            low = (low << 8) & 0xffffff;
+            low = (low << 8) & 0xff_ffff;
         }
 
         /**
@@ -229,21 +331,21 @@ class Bits {
          */
         void terminate() {
             int nbits = 25 - getRangeBits();
-            int mask = 0xff_ffff >> nbits;
+            int mask = 0xff_ffff >>> nbits;
             int val = low + mask;
             int high = low + range;
 
-            boolean over_val = (val >> 24) != 0;
-            boolean over_high = (high >> 24) != 0;
+            boolean over_val = (val >>> 24) != 0;
+            boolean over_high = (high >>> 24) != 0;
 
             val = (val & 0xff_ffff) & ~mask;
-            high = (high & 0xff_ffff);
+            high = high & 0xff_ffff;
 
             if (over_val == over_high) {
 
                 if (val + mask >= high) {
                     nbits++;
-                    mask >>= 1;
+                    mask >>>= 1;
                     val = ((low + mask) & 0xff_ffff) & ~mask;
                 }
 
@@ -256,7 +358,7 @@ class Bits {
                 shift();
             shift();
 
-            int end_val = cache >> (8 - nbits);
+            int end_val = cache >>> (8 - nbits);
 
             if (carryCount != 0) {
                 put(cache);
@@ -266,16 +368,80 @@ class Bits {
                 end_val = nbits < 8 ? 0 : 0xff;
             }
 
-            int p = 0;
-            if (p++ < buffer.end) {
-                int i = buffer.pFw + p;
-                byte[] b = buffer.buffer;
-                b[i] = (byte) (b[i] & (byte) (0xff >> nbits));
-                b[i] = (byte) (b[i] | (byte) (end_val << (8 - nbits)));
+            if (buffer.pFw < buffer.end) {
+                buffer.buffer[buffer.pFw] = (byte) (buffer.buffer[buffer.pFw] & (0xff >> nbits));
+                buffer.buffer[buffer.pFw] = (byte) (buffer.buffer[buffer.pFw] | (end_val << (8 - nbits)));
             }
+        }
+
+        /**
+         * Put arithmetic coder symbol
+         *
+         * @param model Model distribution
+         * @param s     symbol value
+         */
+        void put_symbol(AcModel model, int s) {
+            AcSymbol[] symbols = model.s;
+            int range = this.range >> 10;
+
+            this.low += range * symbols[s].low;
+            this.range = range * symbols[s].range;
+
+            this.carry |= this.low >>> 24;
+            this.low &= 0xff_ffff;
+
+            if (this.range < 0x10000)
+                write_renorm();
+        }
+
+        int get_symbol(AcModel model) {
+            AcSymbol[] symbols = model.s;
+
+            int range = (this.range >> 10) & 0xffff;
+
+            this.error |= (this.low >= (range << 10));
+            if (this.error)
+                this.low = 0;
+
+            int s = 16;
+
+            if (this.low < range * symbols[s].low) {
+                s >>>= 1;
+                s -= this.low < range * symbols[s].low ? 4 : -4;
+                s -= this.low < range * symbols[s].low ? 2 : -2;
+                s -= this.low < range * symbols[s].low ? 1 : -1;
+                s -= this.low < range * symbols[s].low ? 1 : 0;
+            }
+
+            this.low -= range * symbols[s].low;
+            this.range = range * symbols[s].range;
+
+            if (this.range < 0x10000)
+                read_renorm();
+
+            return s;
+        }
+
+        /**
+         * Arithmetic coder renormalization
+         */
+        void write_renorm() {
+            for (; this.range < 0x1_0000; this.range <<= 8)
+                this.shift();
+        }
+
+        /**
+         * Arithmetic coder renormalization
+         */
+        void read_renorm() {
+            for (; this.range < 0x1_0000; this.range <<= 8)
+                this.low = ((this.low << 8) | this.buffer.ac_get()) & 0xff_ffff;
         }
     }
 
+    /**
+     * struct lc3_bits_buffer
+     */
     private static class Buffer {
 
         byte[] buffer;
@@ -283,19 +449,30 @@ class Bits {
         int end;
         int pFw;
         int pBw;
-        Buffer(byte[] buffer, int len) {
-            this.buffer = buffer;
+        Buffer(byte[] buffer, int offset, int len) {
+            this.buffer = Arrays.copyOfRange(buffer, offset, offset + len);
             this.start = 0;
             this.end = len;
             this.pFw = 0;
             this.pBw = len;
         }
+
+        /**
+         * Arithmetic coder get byte
+         *
+         * @return Byte read, 0 on overflow
+         */
+        private int ac_get() {
+            return this.pFw < this.end ? this.buffer[this.pFw++] & 0xff : 0;
+        }
     }
 
-    private Mode mode;
-    private Ac ac;
-    private Accu accu;
-    private Buffer buffer;
+    // struct lc3_bits
+
+    private final Mode mode;
+    private final Ac ac;
+    private final Accu accu;
+    private final Buffer buffer;
 
     //
     // Common
@@ -321,25 +498,20 @@ class Bits {
      *
      * @param mode   Either READ or WRITE mode
      * @param buffer Output buffer
-     * @param len    Output bufferlength (in bytes)
+     * @param len    Output buffer length (in bytes)
      */
-    Bits(Mode mode, byte[] buffer, int len) {
+    Bits(Mode mode, byte[] buffer, int offset, int len) {
         this.mode = mode;
-        this.accu = new Accu();
-        this.accu.n = mode == READ ? LC3_ACCU_BITS : 0;
-        this.buffer = new Buffer(buffer, len);
+        this.buffer = new Buffer(buffer, offset, len);
+        this.accu = new Accu(this.buffer, mode);
         this.ac = new Ac(this.buffer);
 
         if (mode == READ) {
-            Ac ac = this.ac;
-            Accu accu = this.accu;
-            Buffer _buffer = this.buffer;
+            this.ac.low = this.buffer.ac_get() << 16;
+            this.ac.low |= this.buffer.ac_get() << 8;
+            this.ac.low |= this.buffer.ac_get();
 
-            ac.low = ac_get(_buffer) << 16;
-            ac.low |= ac_get(_buffer) << 8;
-            ac.low |= ac_get(_buffer);
-
-            accu.load(_buffer);
+            this.accu.load();
         }
     }
 
@@ -361,6 +533,10 @@ class Bits {
         return -(this.get_bits_left() < 0 || ac.error ? 1 : 0);
     }
 
+    //
+    // Inline implementations
+    //
+
     /**
      * Put a bit
      *
@@ -377,49 +553,7 @@ class Bits {
      * @param n bits count (1 to 32)
      */
     void lc3_put_bits(int v, int n) {
-        if (accu.n + n <= LC3_ACCU_BITS) {
-            accu.v |= v << accu.n;
-            accu.n += n;
-        } else {
-            lc3_put_bits_generic(v, n);
-        }
-    }
-
-    /**
-     * Put arithmetic coder symbol
-     *
-     * @param model Model distribution
-     * @param s     symbol value
-     */
-    void lc3_put_symbol(AcModel model, int s) {
-        AcSymbol[] symbols = model.s;
-        int range = ac.range >> 10;
-
-        ac.low += range * symbols[s].low;
-        ac.range = range * symbols[s].range;
-
-        ac.carry |= ac.low >> 24;
-        ac.low &= 0xff_ffff;
-
-        if (ac.range < 0x10000)
-            lc3_ac_write_renorm();
-    }
-
-    //
-    // Writing
-    //
-
-    /**
-     * Flush and terminate bitstream writing
-     */
-    void lc3_flush_bits() {
-        int nLeft = buffer.pBw - buffer.pFw;
-        for (int n = 8 * nLeft - accu.n; n > 0; n -= 32)
-            lc3_put_bits(0, Math.min(n, 32));
-
-        accu.flush(buffer);
-
-        ac.terminate();
+        accu.put_bits(v, n);
     }
 
     /**
@@ -436,13 +570,17 @@ class Bits {
      * @return The value read
      */
     int lc3_get_bits(int n) {
-        if (accu.n + n <= LC3_ACCU_BITS) {
-            int v = (accu.v >> accu.n) & ((1 << n) - 1);
-            accu.n += n;
-            return v;
-        } else {
-            return lc3_get_bits_generic(n);
-        }
+        return accu.get_bits(n);
+    }
+
+    /**
+     * Put arithmetic coder symbol
+     *
+     * @param model Model distribution
+     * @param s     symbol value
+     */
+    void lc3_put_symbol(Bits.AcModel model, int s) {
+        ac.put_symbol(model, s);
     }
 
     /**
@@ -452,89 +590,26 @@ class Bits {
      * @return The value read
      */
     int lc3_get_symbol(AcModel model) {
-        AcSymbol[] symbols = model.s;
-
-        int range = (ac.range >> 10) & 0xffff;
-
-        ac.error |= (ac.low >= (range << 10));
-        if (ac.error)
-            ac.low = 0;
-
-        int s = 16;
-
-        if (ac.low < range * symbols[s].low) {
-            s >>= 1;
-            s -= ac.low < range * symbols[s].low ? 4 : -4;
-            s -= ac.low < range * symbols[s].low ? 2 : -2;
-            s -= ac.low < range * symbols[s].low ? 1 : -1;
-            s -= ac.low < range * symbols[s].low ? 1 : 0;
-        }
-
-        ac.low -= range * symbols[s].low;
-        ac.range = range * symbols[s].range;
-
-        if (ac.range < 0x10000)
-            lc3_ac_read_renorm();
-
-        return s;
+        return ac.get_symbol(model);
     }
 
     //
-    // Inline implementations
+    // Writing
     //
 
-    void lc3_put_bits_generic(int v, int n) {
-
-        // Fulfill accumulator and flush
-
-        int n1 = Math.min(LC3_ACCU_BITS - accu.n, n);
-        if (n1 != 0) {
-            accu.v |= v << accu.n;
-            accu.n = LC3_ACCU_BITS;
-        }
-
-        accu.flush(this.buffer);
-
-        // Accumulate remaining bits
-
-        accu.v = v >> n1;
-        accu.n = n - n1;
+    /**
+     * Flush and terminate bitstream writing
+     */
+    void lc3_flush_bits() {
+        accu.terminate();
+        ac.terminate();
     }
 
-    int lc3_get_bits_generic(int n) {
-
-        // Fulfill accumulator and read
-
-        accu.load(buffer);
-
-        int n1 = Math.min(LC3_ACCU_BITS - accu.n, n);
-        int v = (accu.v >> accu.n) & ((1 << n1) - 1);
-        accu.n += n1;
-
-        // Second round
-
-        int n2 = n - n1;
-
-        if (n2 != 0) {
-            accu.load(buffer);
-
-            v |= ((accu.v >> accu.n) & ((1 << n2) - 1)) << n1;
-            accu.n += n2;
-        }
-
-        return v;
-    }
-
-    void lc3_ac_read_renorm() {
-
-        for (; ac.range < 0x10000; ac.range <<= 8)
-            ac.low = ((ac.low << 8) | ac_get(this.buffer)) & 0xff_ffff;
-    }
-
+    /**
+     * Arithmetic coder renormalization
+     */
     void lc3_ac_write_renorm() {
-
-        for (; ac.range < 0x10000; ac.range <<= 8)
-            ac.shift();
+        ac.write_renorm();
     }
 
     //
@@ -542,13 +617,9 @@ class Bits {
     //
 
     /**
-     * Arithmetic coder get byte
-     *
-     * @param buffer Bitstream buffer
-     * @return Byte read, 0 on overflow
+     * Arithmetic coder renormalization
      */
-    private int ac_get(Buffer buffer) {
-        int p = 0;
-        return p < buffer.end ? buffer.buffer[buffer.pFw + p++] : 0;
+    void lc3_ac_read_renorm() {
+        ac.read_renorm();
     }
 }

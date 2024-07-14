@@ -25,6 +25,7 @@ import google.sound.lc3.Lc3.SRate;
 import static google.sound.lc3.Energy.LC3_MAX_BANDS;
 import static google.sound.lc3.Energy.lc3_band_lim;
 import static google.sound.lc3.Energy.lc3_num_bands;
+import static google.sound.lc3.FastMath.lc3_exp2f;
 import static google.sound.lc3.FastMath.log2f;
 import static google.sound.lc3.Lc3.Duration._10M;
 import static google.sound.lc3.Lc3.Duration._7M5;
@@ -268,6 +269,8 @@ class Sns {
             7.19685673e+02f, 8.03085722e+02f, 8.96150502e+02f, 1.00000000e+03f
     };
 
+//#if LC3_PLUS_HR
+
     private static final float[] ge_34 = { /* g_tilt = 34 */
             1.00000000e+00f, 1.13231759e+00f, 1.28214312e+00f, 1.45179321e+00f,
             1.64389099e+00f, 1.86140669e+00f, 2.10770353e+00f, 2.38658979e+00f,
@@ -287,14 +290,18 @@ class Sns {
             1.73019574e+03f, 1.95913107e+03f, 2.21835857e+03f, 2.51188643e+03f
     };
 
+//#endif /* LC3_PLUS_HR */
+
     private static final Map<SRate, float[]> ge_table = Map.of(
             _8K, ge_14,
             _16K, ge_18,
             _24K, ge_22,
             _32K, ge_26,
             _48K, ge_30,
+//#if LC3_PLUS_HR
             _48K_HR, ge_30,
             _96K_HR, ge_34
+//#endif /* LC3_PLUS_HR */
     );
 
     private static final float[] e = new float[LC3_MAX_BANDS];
@@ -794,14 +801,14 @@ class Sns {
             scf[i2] = 0.5f * (scf[2 * (n4 + i2)] + scf[2 * (n4 + i2) + 1]);
 
         System.arraycopy(scf, 4 * n4 + 2 * n2, scf, n4 + n2, nb - n4 - n2);
-        Arrays.fill(scf, 4 * n4 + 2 * n2, nb - n4 - n2, 0);
+//        Arrays.fill(scf, 4 * n4 + 2 * n2, nb - n4 - n2, 0); // TODO check
 
         // Spectral shaping
 
-        final int[] lim = lc3_band_lim.get(dt)[sr.ordinal()];
+        int[] lim = lc3_band_lim.get(dt)[sr.ordinal()];
 
         for (int i = 0, ib = 0; ib < nb; ib++) {
-            float g_sns = (float) Math.exp(-scf[ib]);
+            float g_sns = lc3_exp2f(-scf[ib]);
 
             for (; i < lim[ib + 1]; i++)
                 y[yp + i] = x[xp + i] * g_sns;
@@ -879,7 +886,7 @@ class Sns {
 
         // Shape, gain and vectors
         // Write MSB bit of shape index, next LSB bits of shape and gain,
-        // and MVPQ vectors indexes are muxed */
+        // and MVPQ vectors indexes are muxed
 
         int shape_msb = this.shape >> 1;
         bits.lc3_put_bit(shape_msb);
@@ -987,16 +994,21 @@ class Sns {
         spectral_shaping(dt, sr, scf, true, x, xp, y, yp);
     }
 
-    private static final float[][] lc3_sns_lfcb = {
+//#region table.c
 
-            {2.26283366e+00f, 8.13311269e-01f, -5.30193495e-01f, -1.35664836e+00f,
-                    -1.59952177e+00f, -1.44098768e+00f, -1.14381648e+00f, -7.55203768e-01f},
+    /*
+     * SNS Quantization
+     */
 
-            {2.94516479e+00f, 2.41143318e+00f, 9.60455106e-01f, -4.43226488e-01f,
-                    -1.22913612e+00f, -1.55590039e+00f, -1.49688656e+00f, -1.11689987e+00f},
-
-            {-2.18610707e+00f, -1.97152136e+00f, -1.78718620e+00f, -1.91865896e+00f,
-                    -1.79399122e+00f, -1.35738404e+00f, -7.05444279e-01f, -4.78172945e-02f},
+    private static final float[][] lc3_sns_lfcb = {{
+            2.26283366e+00f, 8.13311269e-01f, -5.30193495e-01f, -1.35664836e+00f,
+            -1.59952177e+00f, -1.44098768e+00f, -1.14381648e+00f, -7.55203768e-01f
+    }, {
+            2.94516479e+00f, 2.41143318e+00f, 9.60455106e-01f, -4.43226488e-01f,
+            -1.22913612e+00f, -1.55590039e+00f, -1.49688656e+00f, -1.11689987e+00f
+    }, {
+            -2.18610707e+00f, -1.97152136e+00f, -1.78718620e+00f, -1.91865896e+00f,
+            -1.79399122e+00f, -1.35738404e+00f, -7.05444279e-01f, -4.78172945e-02f},
 
             {6.93688237e-01f, 9.55609857e-01f, 5.75230787e-01f, -1.14603419e-01f,
                     -6.46050637e-01f, -9.52351370e-01f, -1.07405247e+00f, -7.58087707e-01f},
@@ -1231,4 +1243,6 @@ class Sns {
             {0, 1, 29, 421, 4089, 29961, 177045, 880685, 3800305, 14546705, 50250765},
             {0, 1, 31, 481, 4991, 39041, 246047, 1303777, 5984767, 24331777, 89129247},
     };
+
+//#endregion
 }

@@ -43,11 +43,12 @@ class Mdct {
     /**
      * FFT 5 Points
      *
-     * @param x output coefficients, of size 5xn
-     * @param y Input coefficients, of size 5xn
+     * @param x Input coefficients, of size 5xn
+     * @param y output coefficients, of size 5xn
      * @param n Number of interleaved transform to perform (n % 2 = 0)
      */
     private static void fft_5(Complex[] x, Complex[] y, int n) {
+
         float cos1 = 0.3090169944f; // cos(-2Pi 1/5)
         float cos2 = -0.8090169944f; // cos(-2Pi 2/5)
 
@@ -58,15 +59,11 @@ class Mdct {
         int yp = 0;
         for (int i = 0; i < n; i++, xP++, yp += 5) {
 
-            Complex s14 =
-                    new Complex(x[xP + 1 * n].re + x[xP + 4 * n].re, x[xP + 1 * n].im + x[xP + 4 * n].im);
-            Complex d14 =
-                    new Complex(x[xP + 1 * n].re - x[xP + 4 * n].re, x[xP + 1 * n].im - x[xP + 4 * n].im);
+            var s14 = new Complex(x[xP + 1 * n].re + x[xP + 4 * n].re, x[xP + 1 * n].im + x[xP + 4 * n].im);
+            var d14 = new Complex(x[xP + 1 * n].re - x[xP + 4 * n].re, x[xP + 1 * n].im - x[xP + 4 * n].im);
 
-            Complex s23 =
-                    new Complex(x[xP + 2 * n].re + x[xP + 3 * n].re, x[xP + 2 * n].im + x[xP + 3 * n].im);
-            Complex d23 =
-                    new Complex(x[xP + 2 * n].re - x[xP + 3 * n].re, x[xP + 2 * n].im - x[xP + 3 * n].im);
+            var s23 = new Complex(x[xP + 2 * n].re + x[xP + 3 * n].re, x[xP + 2 * n].im + x[xP + 3 * n].im);
+            var d23 = new Complex(x[xP + 2 * n].re - x[xP + 3 * n].re, x[xP + 2 * n].im - x[xP + 3 * n].im);
 
             y[yp + 0].re = x[xP + 0].re + s14.re + s23.re;
 
@@ -116,22 +113,22 @@ class Mdct {
             for (int j = 0; j < n3; j++, x0++, x1++, x2++) {
 
                 y[y0 + j].re = x[x0].re + x[x1].re * w[w0 + j][0].re - x[x1].im * w[w0 + j][0].im
-                        + x[x2].re * w[w0 + j][1].re - x[x2].im * w[w0 + j][1].im;
+                                        + x[x2].re * w[w0 + j][1].re - x[x2].im * w[w0 + j][1].im;
 
                 y[y0 + j].im = x[x0].im + x[x1].im * w[w0 + j][0].re + x[x1].re * w[w0 + j][0].im
-                        + x[x2].im * w[w0 + j][1].re + x[x2].re * w[w0 + j][1].im;
+                                        + x[x2].im * w[w0 + j][1].re + x[x2].re * w[w0 + j][1].im;
 
                 y[y1 + j].re = x[x0].re + x[x1].re * w[w1 + j][0].re - x[x1].im * w[w1 + j][0].im
-                        + x[x2].re * w[w1 + j][1].re - x[x2].im * w[w1 + j][1].im;
+                                        + x[x2].re * w[w1 + j][1].re - x[x2].im * w[w1 + j][1].im;
 
                 y[y1 + j].im = x[x0].im + x[x1].im * w[w1 + j][0].re + x[x1].re * w[w1 + j][0].im
-                        + x[x2].im * w[w1 + j][1].re + x[x2].re * w[w1 + j][1].im;
+                                        + x[x2].im * w[w1 + j][1].re + x[x2].re * w[w1 + j][1].im;
 
                 y[y2 + j].re = x[x0].re + x[x1].re * w[w2 + j][0].re - x[x1].im * w[w2 + j][0].im
-                        + x[x2].re * w[w2 + j][1].re - x[x2].im * w[w2 + j][1].im;
+                                        + x[x2].re * w[w2 + j][1].re - x[x2].im * w[w2 + j][1].im;
 
                 y[y2 + j].im = x[x0].im + x[x1].im * w[w2 + j][0].re + x[x1].re * w[w2 + j][0].im
-                        + x[x2].im * w[w2 + j][1].re + x[x2].re * w[w2 + j][1].im;
+                                        + x[x2].im * w[w2 + j][1].re + x[x2].re * w[w2 + j][1].im;
             }
     }
 
@@ -193,8 +190,9 @@ class Mdct {
 
         fft_5(x, y[is], n /= 5);
 
-        for (i3 = 0; (n & (n - 1)) != 0; i3++, is ^= 1)
+        for (i3 = 0; (n & (n - 1)) != 0; i3++, is ^= 1) {
             fft_bf3(lc3_fft_twiddles_bf3[i3], y[is], y[is ^ 1], n /= 3);
+        }
 
         for (i2 = 0; n > 1; i2++, is ^= 1)
             fft_bf2(lc3_fft_twiddles_bf2[i2][i3], y[is], y[is ^ 1], n >>= 1);
@@ -215,7 +213,7 @@ class Mdct {
      * @param y  Output windowed samples
      * @param d  Output delayed ones
      */
-    private static void mdct_window(Duration dt, SRate sr, float[] x, int xp, float[] d, int dp, float[] y, int yp) {
+    private static void window(Duration dt, SRate sr, float[] x, int xp, float[] d, int dp, float[] y) {
         float[] win = lc3_mdct_win.get(dt)[sr.ordinal()];
         int ns = lc3_ns(dt, sr), nd = lc3_nd(dt, sr);
 
@@ -226,12 +224,12 @@ class Mdct {
 
         int x0 = xp + ns - nd; // x
         int x1 = x0;
-        int y0 = yp + ns / 2; // y
+        int y0 = ns / 2; // y
         int y1 = y0;
         int d0 = dp; // d
         int d1 = nd;
 
-        while (x1 > 0) {
+        while (x1 - xp > 0) {
             y[--y0] = d[d0] * win[w0++] - x[--x1] * win[--w1];
             y[y1++] = (d[d0++] = x[x0++]) * win[w2++];
 
@@ -257,7 +255,7 @@ class Mdct {
      * @param x   Input  coefficients
      * @param y   output coefficients
      */
-    private static void mdct_pre_fft(lc3_mdct_rot_def def, float[] x, Complex[] y) {
+    private static void pre_fft(lc3_mdct_rot_def def, float[] x, Complex[] y) {
         int n4 = def.n4;
 
         int x0 = 0; // x;
@@ -293,7 +291,7 @@ class Mdct {
      * @param x   Input coefficients
      * @param y   output coefficients
      */
-    private static void mdct_post_fft(lc3_mdct_rot_def def, Complex[] x, float[] y) {
+    private static void post_fft(lc3_mdct_rot_def def, Complex[] x, float[] y) {
         int n4 = def.n4, n8 = n4 >> 1;
 
         Complex[] w = def.w;
@@ -305,7 +303,7 @@ class Mdct {
         int y0 = n4; // y
         int y1 = y0;
 
-        for (; y1 > 0; x0++, x1--, w0++, w1--) {
+        for (; y1> 0; x0++, x1--, w0++, w1--) {
 
             float u0 = x[x0].im * w[w0].im + x[x0].re * w[w0].re;
             float u1 = x[x1].re * w[w1].im - x[x1].im * w[w1].re;
@@ -331,7 +329,7 @@ class Mdct {
      * @param x   Input coefficients
      * @param y   output coefficients
      */
-    private static void imdct_pre_fft(lc3_mdct_rot_def def, float[] x, int xp, Complex[] y) {
+    private static void pre_fft(lc3_mdct_rot_def def, float[] x, int xp, Complex[] y) {
         int n4 = def.n4;
 
         int x0 = xp; // x
@@ -370,7 +368,7 @@ class Mdct {
      * @param x   Input coefficients
      * @param y   output coefficients
      */
-    private static void imdct_post_fft(lc3_mdct_rot_def def, Complex[] x, float[] y) {
+    private static void inverse_post_fft(lc3_mdct_rot_def def, Complex[] x, float[] y) {
         int n4 = def.n4;
 
         Complex[] w = def.w;
@@ -405,7 +403,7 @@ class Mdct {
      * @param d  delayed samples
      * @param y  Output samples
      */
-    private static void imdct_window(Duration dt, SRate sr, float[] x, float[] d, float[] y) {
+    private static void inverse_window(Duration dt, SRate sr, float[] x, float[] d, int dp, float[] y, int yp) {
 
         // The full MDCT coefficients is given by symmetry :
         //   T[   0 ..  n/4-1] = -half[n/4-1 .. 0    ]
@@ -420,16 +418,16 @@ class Mdct {
         int w0 = w2 + 3 * n4;
         int w1 = w0;
 
-        int x0 = nd - n4; // d
+        int x0 = dp + nd - n4; // d
         int x1 = x0; // d
-        int y0 = nd - n4; // y
+        int y0 = yp + nd - n4; // y
         int y1 = y0; // y
-        int y2 = nd; // d
-        int y3 = 0; // d
+        int y2 = dp + nd; // d
+        int y3 = dp + 0; // d
 
         int xp = 0; // x
 
-        while (y0 > 0) {
+        while (y0 - yp > 0) {
             y[--y0] = d[--x0] - x[xp] * w[w1++];
             y[y1++] = d[x1++] + x[xp++] * w[--w0];
 
@@ -437,12 +435,12 @@ class Mdct {
             y[y1++] = d[x1++] + x[xp++] * w[--w0];
         }
 
-        while (y1 < nd) {
+        while (y1 - yp < nd) {
             y[y1++] = d[x1++] + x[xp++] * w[--w0];
             y[y1++] = d[x1++] + x[xp++] * w[--w0];
         }
 
-        while (y1 < 2 * n4) {
+        while (y1 - yp < 2 * n4) {
             y[y1++] = x[xp] * w[--w0];
             d[--y2] = x[xp++] * w[w2++];
 
@@ -466,8 +464,7 @@ class Mdct {
      * @param n count of samples, scaled as output
      * @param f Scale factor
      */
-    private static void rescale(float[] x, int n, float f) {
-        int xP = 0;
+    private static void rescale(float[] x, int xP, int n, float f) {
         for (int i = 0; i < (n >> 2); i++) {
             x[xP++] *= f;
             x[xP++] *= f;
@@ -478,27 +475,21 @@ class Mdct {
 
     private static class Union {
 
-        float[] f() {
-            float[] fs = new float[z.length * 2];
-            IntStream.range(0, fs.length).forEach(i -> {
-                fs[i * 2 + 0] = z[i].re;
-                fs[i * 2 + 1] = z[i].im;
-            });
-            return fs;
-        }
+        float[] f;
 
         Complex[] z;
 
         Union(Complex[] buffer) {
             z = buffer;
+            f = new float[z.length * 2];
         }
 
-        Union(float[] fs) {
-            z = new Complex[fs.length / 2];
+        Union(float[] fs, int fsp) {
+            z = new Complex[(fs.length - fsp) / 2];
             IntStream.range(0, z.length).forEach(i -> {
                 z[i] = new Complex();
-                z[i].re = fs[i * 2 + 0];
-                z[i].im = fs[i * 2 + 1];
+                z[i].re = fs[fsp / 2 + i * 2 + 0];
+                z[i].im = fs[fsp / 2 + i * 2 + 1];
             });
         }
     }
@@ -515,23 +506,23 @@ class Mdct {
      * @param d     delayed buffer
      * @param y     Output `ns` coefficients and `nd` delayed samples
      */
-    static void lc3_mdct_forward(Duration dt, SRate sr, SRate srDst, float[] x, int xp, float[] d, int dp, float[] y, int yp) {
+    static void forward(Duration dt, SRate sr, SRate srDst, float[] x, int xp, float[] d, int dp, float[] y, int yp) {
         lc3_mdct_rot_def rot = lc3_mdct_rot.get(dt)[sr.ordinal()];
         int ns_dst = lc3_ns(dt, srDst);
         int ns = lc3_ns(dt, sr);
 
         Complex[] buffer = new Complex[LC3_MAX_NS / 2];
-        Complex[] z = new Union(y).z;
+        Complex[] z = new Union(y, yp).z;
         Union u = new Union(buffer);
 
-        mdct_window(dt, sr, x, xp, d, dp, u.f(), yp);
+        window(dt, sr, x, xp, d, dp, u.f);
 
-        mdct_pre_fft(rot, u.f(), u.z);
+        pre_fft(rot, u.f, u.z);
         u.z = fft(u.z, ns / 2, u.z, z);
-        mdct_post_fft(rot, u.z, y);
+        post_fft(rot, u.z, y);
 
         if (ns != ns_dst)
-            rescale(y, ns_dst, (float) Math.sqrt((float) ns_dst / ns));
+            rescale(y, yp, ns_dst, (float) Math.sqrt((float) ns_dst / ns));
     }
 
     /**
@@ -546,22 +537,23 @@ class Mdct {
      * @param d     delayed buffer
      * @param y     Output `ns` samples and `nd` delayed ones
      */
-    static void lc3_mdct_inverse(Duration dt, SRate sr, SRate srSrc, float[] x, int xp, float[] d, int dp, float[] y, int yp) {
+    static void inverse(Duration dt, SRate sr, SRate srSrc, float[] x, int xp, float[] d, int dp, float[] y, int yp) {
         lc3_mdct_rot_def rot = lc3_mdct_rot.get(dt)[sr.ordinal()];
         int ns_src = lc3_ns(dt, srSrc);
         int ns = lc3_ns(dt, sr);
 
         Complex[] buffer = new Complex[LC3_MAX_NS / 2];
-        Complex[] z = new Union(y).z;
-        Union u = new Union(buffer);
+        IntStream.range(0, buffer.length).forEach(i -> buffer[i] = new Complex());
 
-        imdct_pre_fft(rot, x, xp, z);
+        Complex[] z = new Union(y, yp).z;
+        Union u = new Union(buffer);
+        pre_fft(rot, x, xp, z);
         z = fft(z, ns / 2, z, u.z);
-        imdct_post_fft(rot, z, u.f());
+        inverse_post_fft(rot, z, u.f);
 
         if (ns != ns_src)
-            rescale(u.f(), ns, (float) Math.sqrt((float) ns / ns_src));
+            rescale(u.f, 0, ns, (float) Math.sqrt((float) ns / ns_src));
 
-        imdct_window(dt, sr, u.f(), d, y);
+        inverse_window(dt, sr, u.f, d, dp, y, yp);
     }
 }

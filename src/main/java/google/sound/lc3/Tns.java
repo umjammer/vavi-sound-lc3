@@ -278,7 +278,7 @@ class Tns {
      * @param order    Return order of coefficients
      * @param rc_q     Return quantized coefficients
      */
-    private static void quantize_rc(final float[] rc, int maxorder, int[] order, int orderP, int[] rc_q) {
+    private static void quantize_rc(float[] rc, int maxorder, int[] order, int orderP, int[] rc_q) {
 
         order[orderP] = maxorder;
 
@@ -315,7 +315,7 @@ class Tns {
      * @param order order
      * @param rc    Return reflection coefficients
      */
-    private static void unquantize_rc(final int[] rc_q, int order, float[/* 8 */] rc) {
+    private static void unquantize_rc(int[] rc_q, int order, float[/* 8 */] rc) {
         for (int i = 0; i < order; i++) {
             float rc_m = q_inv[Math.abs(rc_q[i])];
             rc[i] = rc_q[i] < 0 ? -rc_m : rc_m;
@@ -428,10 +428,9 @@ class Tns {
      * @param bw     bandwidth of the frame
      * @param nnFlag True when high energy detected near Nyquist frequency
      * @param nBytes Size in bytes of the frame
-     * @param data   Return bitstream data
      * @param x      Spectral coefficients, filtered as output
      */
-    static void lc3_tns_analyze(Duration dt, BandWidth bw, boolean nnFlag, int nBytes, Tns data, float[] x, int xp) {
+    void lc3_tns_analyze(Duration dt, BandWidth bw, boolean nnFlag, int nBytes, float[] x, int xp) {
         // Processing steps :
         // - Determine the LPC (Linear Predictive Coding) Coefficients
         // - Check is the filtering is disabled
@@ -443,48 +442,47 @@ class Tns {
         float[][] a = new float[2][9];
         float[][] rc = new float[2][8];
 
-        data.lpcWeighting = resolve_lpc_weighting(dt, nBytes);
-        data.nFilters = 1 + (dt.ordinal() >= _5M.ordinal() && bw.ordinal() >= SWB.ordinal() ? 1 : 0);
+        this.lpcWeighting = resolve_lpc_weighting(dt, nBytes);
+        this.nFilters = 1 + (dt.ordinal() >= _5M.ordinal() && bw.ordinal() >= SWB.ordinal() ? 1 : 0);
         int maxOrder = dt.ordinal() <= _5M.ordinal() ? 4 : 8;
 
         compute_lpc_coeffs(dt, bw, maxOrder, x, xp, predGain, a);
 
-        for (int f = 0; f < data.nFilters; f++) {
+        for (int f = 0; f < this.nFilters; f++) {
 
-            data.rcOrder[f] = 0;
+            this.rcOrder[f] = 0;
             if (nnFlag || predGain[f] <= 1.5f)
                 continue;
 
-            if (data.lpcWeighting && predGain[f] < 2.f)
+            if (this.lpcWeighting && predGain[f] < 2.f)
                 lpc_weighting(predGain[f], a[f]);
 
             lpc_reflection(a[f], maxOrder, rc[f]);
 
-            quantize_rc(rc[f], maxOrder, data.rcOrder, f, data.rc[f]);
-            unquantize_rc(data.rc[f], data.rcOrder[f], rc[f]);
+            quantize_rc(rc[f], maxOrder, this.rcOrder, f, this.rc[f]);
+            unquantize_rc(this.rc[f], this.rcOrder[f], rc[f]);
         }
 
-        forward_filtering(dt, bw, data.rcOrder, rc, x);
+        forward_filtering(dt, bw, this.rcOrder, rc, x);
     }
 
     /**
      * Return number of bits coding the data
      *
-     * @param data Bitstream data
      * @return Bit consumption
      */
-    static int lc3_tns_get_nbits(Tns data) {
+    int lc3_tns_get_nbits() {
         int nBits = 0;
 
-        for (int f = 0; f < data.nFilters; f++) {
+        for (int f = 0; f < this.nFilters; f++) {
 
             int nbits_2048 = 2048;
-            int rc_order = data.rcOrder[f];
+            int rc_order = this.rcOrder[f];
 
-            nbits_2048 += rc_order > 0 ? lc3_tns_order_bits[data.lpcWeighting ? 1 : 0][rc_order - 1] : 0;
+            nbits_2048 += rc_order > 0 ? lc3_tns_order_bits[this.lpcWeighting ? 1 : 0][rc_order - 1] : 0;
 
             for (int i = 0; i < rc_order; i++)
-                nbits_2048 += lc3_tns_coeffs_bits[i][8 + data.rc[f][i]];
+                nbits_2048 += lc3_tns_coeffs_bits[i][8 + this.rc[f][i]];
 
             nBits += (nbits_2048 + (1 << 11) - 1) >> 11;
         }
@@ -496,20 +494,19 @@ class Tns {
      * Put bitstream data
      *
      * @param bits Bitstream context
-     * @param data Bitstream data
      */
-    static void lc3_tns_put_data(Bits bits, Tns data) {
-        for (int f = 0; f < data.nFilters; f++) {
-            int rc_order = data.rcOrder[f];
+    void lc3_tns_put_data(Bits bits) {
+        for (int f = 0; f < this.nFilters; f++) {
+            int rc_order = this.rcOrder[f];
 
             bits.lc3_put_bits(rc_order > 0 ? 1 : 0, 1);
             if (rc_order <= 0)
                 continue;
 
-            bits.lc3_put_symbol(lc3_tns_order_models[data.lpcWeighting ? 1 : 0], rc_order - 1);
+            bits.lc3_put_symbol(lc3_tns_order_models[this.lpcWeighting ? 1 : 0], rc_order - 1);
 
             for (int i = 0; i < rc_order; i++)
-                bits.lc3_put_symbol(lc3_tns_coeffs_models[i], 8 + data.rc[f][i]);
+                bits.lc3_put_symbol(lc3_tns_coeffs_models[i], 8 + this.rc[f][i]);
         }
     }
 
@@ -524,25 +521,24 @@ class Tns {
      * @param dt     Duration of the frame
      * @param bw     bandwidth of the frame
      * @param nBytes Size in bytes of the frame
-     * @param data   Bitstream data
      * @return 0: Ok  -1: Invalid bitstream data
      */
-    static int lc3_tns_get_data(Bits bits, Duration dt, BandWidth bw, int nBytes, Tns data) {
-        data.nFilters = 1 + ((dt.ordinal() >= _5M.ordinal() && bw.ordinal() >= SWB.ordinal()) ? 1 : 0);
-        data.lpcWeighting = resolve_lpc_weighting(dt, nBytes);
+    int lc3_tns_get_data(Bits bits, Duration dt, BandWidth bw, int nBytes) {
+        this.nFilters = 1 + ((dt.ordinal() >= _5M.ordinal() && bw.ordinal() >= SWB.ordinal()) ? 1 : 0);
+        this.lpcWeighting = resolve_lpc_weighting(dt, nBytes);
 
-        for (int f = 0; f < data.nFilters; f++) {
+        for (int f = 0; f < this.nFilters; f++) {
 
-            data.rcOrder[f] = bits.lc3_get_bit();
-            if (data.rcOrder[f] == 0)
+            this.rcOrder[f] = bits.lc3_get_bit();
+            if (this.rcOrder[f] == 0)
                 continue;
 
-            data.rcOrder[f] += bits.lc3_get_symbol(lc3_tns_order_models[data.lpcWeighting ? 1 : 0]);
-            if (dt.ordinal() <= _5M.ordinal() && data.rcOrder[f] > 4)
+            this.rcOrder[f] += bits.lc3_get_symbol(lc3_tns_order_models[this.lpcWeighting ? 1 : 0]);
+            if (dt.ordinal() <= _5M.ordinal() && this.rcOrder[f] > 4)
                 return -1;
 
-            for (int i = 0; i < data.rcOrder[f]; i++)
-                data.rc[f][i] = (int) bits.lc3_get_symbol(lc3_tns_coeffs_models[i]) - 8;
+            for (int i = 0; i < this.rcOrder[f]; i++)
+                this.rc[f][i] = bits.lc3_get_symbol(lc3_tns_coeffs_models[i]) - 8;
         }
 
         return 0;
@@ -553,18 +549,24 @@ class Tns {
      *
      * @param dt   Duration  of the frame
      * @param bw   bandwidth of the frame
-     * @param data Bitstream data
      * @param x    Spectral coefficients, filtered as output
      */
-    static void lc3_tns_synthesize(Duration dt, BandWidth bw, Tns data, float[] x, int xp) {
+    void lc3_tns_synthesize(Duration dt, BandWidth bw, float[] x, int xp) {
         float[][] rc = new float[2][8];
 
-        for (int f = 0; f < data.nFilters; f++)
-            if (data.rcOrder[f] != 0)
-                unquantize_rc(data.rc[f], data.rcOrder[f], rc[f]);
+        for (int f = 0; f < this.nFilters; f++)
+            if (this.rcOrder[f] != 0)
+                unquantize_rc(this.rc[f], this.rcOrder[f], rc[f]);
 
-        inverse_filtering(dt, bw, data.rcOrder, rc, x, xp);
+        inverse_filtering(dt, bw, this.rcOrder, rc, x, xp);
     }
+
+//#region table.c
+
+    /*
+     * TNS Arithmetic Coding
+     * The number of bits are given at 2048th of bits
+     */
 
     private static final AcModel[] lc3_tns_order_models = {
             new AcModel(new int[][] {
@@ -675,4 +677,6 @@ class Tns {
                     20480, 1201, 10854, 18432, 20480, 20480, 20480, 20480, 20480}
 
     };
+
+//#endregion
 }

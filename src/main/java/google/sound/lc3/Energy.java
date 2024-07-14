@@ -45,7 +45,7 @@ class Energy {
      * @param e  Energy estimation per bands
      * @return True when high energy detected near Nyquist frequency
      */
-    static boolean lc3_energy_compute(Duration dt, SRate sr, final float[] x, int xp, float[] e) {
+    static boolean lc3_energy_compute(Duration dt, SRate sr, float[] x, int xp, float[] e) {
         int nb = lc3_num_bands.get(dt)[sr.ordinal()];
         int[] lim = lc3_band_lim.get(dt)[sr.ordinal()];
 
@@ -54,7 +54,7 @@ class Energy {
         float[] e_sum = new float[] {0, 0};
         int iband_h = nb - map.get(dt);
 
-        int eP = 0; // e
+        int ep = 0; // e
         for (int iband = 0, i = lim[iband]; iband < nb; iband++) {
             int ie = lim[iband + 1];
             int n = ie - i;
@@ -63,14 +63,16 @@ class Energy {
             for (i++; i < ie; i++)
                 sx2 += x[xp + i] * x[xp + i];
 
-            e[eP] = sx2 / n;
-            e_sum[iband >= iband_h ? 1 : 0] += e[eP++];
+            e[ep] = sx2 / n;
+            e_sum[iband >= iband_h ? 1 : 0] += e[ep++];
         }
 
         // Return the near nyquist flag
 
         return e_sum[1] > 30 * e_sum[0];
     }
+
+//#region table.c
 
     /**
      * Limits of bands
@@ -381,4 +383,6 @@ class Energy {
                     band_lim_10m_96k_hr
             }
     );
+
+//#endregion
 }

@@ -25,10 +25,10 @@ import vavi.sound.lc3.Lc3Plus;
  * @author <a href="mailto:umjammer@gmail.com">Naohide Sano</a> (nsano)
  * @version 0.00 2023/05/31 umjammer initial version <br>
  */
-class Lc32PcmAudioInputStream extends AudioInputStream {
+class Lc3ToPcmAudioInputStream extends AudioInputStream {
 
     /** */
-    public Lc32PcmAudioInputStream(InputStream in, AudioFormat audioFormat, int length, Lc3Plus lc3Plus) throws IOException {
+    public Lc3ToPcmAudioInputStream(InputStream in, AudioFormat audioFormat, int length, Lc3Plus lc3Plus) throws IOException {
         super(new OutputEngineInputStream(new Lc3OutputEngine(lc3Plus)), audioFormat, length);
     }
 
@@ -39,7 +39,7 @@ class Lc32PcmAudioInputStream extends AudioInputStream {
         private DataOutputStream out;
 
         /** */
-        private Lc3Plus lc3Plus;
+        private final Lc3Plus lc3Plus;
 
         /** */
         public Lc3OutputEngine(Lc3Plus lc3Plus) throws IOException {

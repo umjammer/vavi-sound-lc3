@@ -35,15 +35,15 @@ import static vavi.sound.lc3.jna.Lc3Library.LC3PLUS_MAX_BYTES;
 public class Lc3Plus implements AutoCloseable {
 
     /** the decoder structure */
-    private PointerByReference decoder = new PointerByReference();
+    private final PointerByReference decoder = new PointerByReference();
 
     // input data
 
     /** MUST be 8000 Hz, 16000 Hz, 24000 Hz, 32000 Hz, 44100 Hz, 48000 Hz or 96000 Hz */
     private int sampleRate = 48000;
-    private int bitrate;
+    private final int bitrate;
     private int signalLength;
-    private int channels;
+    private final int channels;
     /** MUST be 10 ms, 5 ms or 2.5 ms */
     private float frameMs = 10;
     private boolean epMode;
@@ -57,10 +57,10 @@ public class Lc3Plus implements AutoCloseable {
 
     // runtime
 
-    private LittleEndianDataInputStream ledis;
+    private final LittleEndianDataInputStream ledis;
 
     /** read buffer */
-    private Memory input;
+    private final Memory input;
     /** scratch */
     private int scratchSize;
     /** scratch */
@@ -245,7 +245,7 @@ Debug.println(Level.FINER, "decode: " + inSize + ", " + bfiExt);
             for (int j = 0; j < 8; j++) {
                 int currentBit = ledis.readShort();
                 if (currentBit == G192_ONE) {
-                    byte_ |= 1 << j;
+                    byte_ = (byte) (byte_ | 1 << j);
                 }
             }
             input.setByte(i, byte_);
