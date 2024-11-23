@@ -25,7 +25,7 @@ public class Lc3Encoding extends AudioFormat.Encoding {
      *
      * @param name Name of the LC3 encoding.
      */
-    public Lc3Encoding(String name) {
+    private Lc3Encoding(String name) {
         super(name);
     }
 }
