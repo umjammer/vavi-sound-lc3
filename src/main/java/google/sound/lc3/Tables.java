@@ -16,18 +16,18 @@
 
 package google.sound.lc3;
 
+import java.lang.System.Logger;
+import java.lang.System.Logger.Level;
 import java.nio.FloatBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
-import java.util.logging.Level;
 import java.util.stream.IntStream;
 
 import google.sound.lc3.Lc3.Complex;
 import google.sound.lc3.Lc3.Duration;
 import google.sound.lc3.Lc3.SRate;
-import vavi.util.Debug;
 
 import static google.sound.lc3.Lc3.Duration._10M;
 import static google.sound.lc3.Lc3.Duration._2M5;
@@ -47,6 +47,7 @@ import static google.sound.lc3.Lc3.SRate._48K_HR;
 import static google.sound.lc3.Lc3.SRate._8K;
 import static google.sound.lc3.Lc3.SRate._96K_HR;
 import static google.sound.lc3.Lc3.isHR;
+import static java.lang.System.getLogger;
 
 
 /**
@@ -65,6 +66,8 @@ import static google.sound.lc3.Lc3.isHR;
  * nt   Number of 1.25 ms previous samples
  */
 class Tables {
+
+    private static final Logger logger = getLogger(Tables.class.getName());
 
     private static final String DELIMITER = "[\\s,f]+";
 
@@ -366,7 +369,7 @@ class Tables {
         while (s.hasNextFloat()) {
             l.add(s.nextFloat());
         }
-Debug.println(Level.FINEST, f + ": " + l.size());
+logger.log(Level.TRACE, f + ": " + l.size());
         return l.stream().collect(() -> FloatBuffer.allocate(l.size()), FloatBuffer::put, (left, right) -> {}).array();
     }
 

@@ -18,6 +18,8 @@
 
 package google.sound.lc3;
 
+import java.lang.System.Logger;
+import java.lang.System.Logger.Level;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
@@ -28,7 +30,6 @@ import java.util.Arrays;
 import google.sound.lc3.AttDet.Analysis;
 import google.sound.lc3.Bits.Mode;
 import google.sound.lc3.Ltpf.Synthesis;
-import vavi.util.Debug;
 
 import static google.sound.lc3.AttDet.lc3_attdet_run;
 import static google.sound.lc3.BwDet.lc3_bwdet_get_bw;
@@ -54,6 +55,7 @@ import static google.sound.lc3.Tables.lc3_ne;
 import static google.sound.lc3.Tables.lc3_nh;
 import static google.sound.lc3.Tables.lc3_ns;
 import static google.sound.lc3.Tables.lc3_nt;
+import static java.lang.System.getLogger;
 
 
 /**
@@ -207,6 +209,8 @@ import static google.sound.lc3.Tables.lc3_nt;
  * @author Antoine SOULIER, Tempow / Google LLC
  */
 class Lc3 {
+
+    private static final Logger logger = getLogger(Lc3.class.getName());
 
     interface HexaConsumer<T, U, V, W, X, Y> {
 
@@ -1084,7 +1088,7 @@ class Lc3 {
         decoder.plc.lc3_plc_reset();
 
         decoder.x = new float[LC3_DECODER_BUFFER_COUNT(dt_us, sr_pcm_hz)];
-Debug.println(decoder.x.length);
+logger.log(Level.DEBUG, decoder.x.length);
 
         return decoder;
     }
