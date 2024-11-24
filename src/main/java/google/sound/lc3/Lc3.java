@@ -794,7 +794,7 @@ class Lc3 {
         side.pitch_present = side.ltpf.lc3_ltpf_analyse(dt, sr_pcm, encoder.ltpf, null /* encoder.x */, xt); // TODO null
 
         System.arraycopy(encoder.x, xt + (ns - nt), encoder.x, xt - nt, nt);
-        Arrays.fill(encoder.x, xt + (ns - nt), nt, 0);
+//        Arrays.fill(encoder.x, xt + (ns - nt), nt, 0);
 
         // Spectral
 
