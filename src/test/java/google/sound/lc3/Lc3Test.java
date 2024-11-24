@@ -43,6 +43,8 @@ class Lc3Test {
 
     @Test
     void test2() throws Exception {
+//        System.setProperty("google.sound.lc3.plus", "true");
+//        System.setProperty("google.sound.lc3.hr", "true");
         Decoder.main(new String[] {lc3file});
     }
 }
