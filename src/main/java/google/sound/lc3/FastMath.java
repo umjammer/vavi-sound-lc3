@@ -105,11 +105,13 @@ class FastMath {
 
         ByteBuffer y = ByteBuffer.allocate(Integer.BYTES).order(ByteOrder.LITTLE_ENDIAN);
 
-        y.putFloat(0, (p[0]) * x);
-        y.putFloat(0, (y.getFloat(0) + p[1]) * x);
-        y.putFloat(0, (y.getFloat(0) + p[2]) * x);
-        y.putFloat(0, (y.getFloat(0) + p[3]) * x);
-        y.putFloat(0, (y.getFloat(0) + 1.f) * e[k & 7]);
+        float yf = (p[0]) * x;
+        yf = (yf + p[1]) * x;
+        yf = (yf + p[2]) * x;
+        yf = (yf + p[3]) * x;
+        yf = (yf + 1.f) * e[k & 7];
+
+        y.putFloat(0, yf);
 
         // Add the exponent
 
