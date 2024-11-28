@@ -18,11 +18,16 @@
 ## Usage
 
 ```java
-    AudioInputStream ais = AudioSystem.getAudioInputStream(Files.newInputStream(Paths.get(lc3)));
+    AudioInputStream ais = AudioSystem.getAudioInputStream(Paths.get(lc3).toFIle());
     Clip clip = AudioSystem.getClip();
     clip.open(AudioSystem.getAudioInputStream(new AudioFormat(44100, 16, 2, true, false), ais));
     clip.loop(Clip.LOOP_CONTINUOUSLY);
 ```
+
+system properties (for google's pure java version only)
+
+* `google.sound.lc3.plus` ... dealing `PLUS` mode , default `false`
+* `google.sound.lc3.hr` ... if `PLUS` mode, dealing `HR` mode, default `false`
 
 ## References
 
@@ -35,4 +40,5 @@
 
  * research difference between `NativeLong` and `PointerByReference` at method argument
    * this time `NativeLong` works well and `PointerByReference` does not
- * ~~pure java version from [google's](https://github.com/google/liblc3)~~ (wip)
+ * ~~pure java version from [google's](https://github.com/google/liblc3)~~ little bit noisy
+   * make it more oop 
