@@ -7,7 +7,6 @@ package vavi.sound.lc3;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.System.Logger;
-import java.lang.System.Logger.Level;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.ShortBuffer;

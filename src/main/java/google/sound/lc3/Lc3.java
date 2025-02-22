@@ -228,9 +228,9 @@ class Lc3 {
      * Activation flags for LC3-Plus and LC3-Plus HR features
      */
 
-    static boolean LC3_PLUS = Boolean.parseBoolean(System.getProperty("google.sound.lc3.plus", "false"));
+    static final boolean LC3_PLUS = Boolean.parseBoolean(System.getProperty("google.sound.lc3.plus", "false"));
 
-    static boolean LC3_PLUS_HR = Boolean.parseBoolean(System.getProperty("google.sound.lc3.hr", "false"));
+    static final boolean LC3_PLUS_HR = Boolean.parseBoolean(System.getProperty("google.sound.lc3.hr", "false"));
 
     static <T> T LC3_IF_PLUS(T a, T b) {
         return LC3_PLUS ? a : b;
@@ -328,10 +328,10 @@ class Lc3 {
 
     /**
      * True when sample rate in Hz is suitable, according to the
-     * selection of the high-resolution mode `hrmode`.
+     * selection of the high-resolution mode `hrMode`.
      */
-    static boolean LC3_HR_CHECK_SR_HZ(boolean hrmode, int sr) {
-        return hrmode ? sr == 48000 || sr == 96000 : LC3_CHECK_SR_HZ(sr);
+    static boolean LC3_HR_CHECK_SR_HZ(boolean hrMode, int sr) {
+        return hrMode ? sr == 48000 || sr == 96000 : LC3_CHECK_SR_HZ(sr);
     }
 
     /**
@@ -357,9 +357,10 @@ class Lc3 {
                 int xs = encoder.xs_off; // encoder.x
                 int ns = lc3_ns(dt, sr);
 
-                for (int i = 0; i < ns; i++ /*, pcm += stride */) { // TODO consider stride
-                    encoder.x[xt + i] = pcm_.get();
-                    encoder.x[xs + i] = pcm_.get();
+                int pcmP = 0;
+                for (int i = 0; i < ns; i++ , pcmP += stride) {
+                    encoder.x[xt + i] = pcm_.get(pcmP);
+                    encoder.x[xs + i] = pcm_.get(pcmP);
                 }
             }
             /**
@@ -396,9 +397,10 @@ class Lc3 {
                 int xs = encoder.xs_off; // encoder.x
                 int ns = lc3_ns(dt, sr);
 
-                for (int i = 0; i < ns; i++ /*, pcm += stride */) { // TODO consider stride
-                    encoder.x[xt + i] = pcm_.get() >>> 8;
-                    encoder.x[xs + i] = lc3_ldexpf(pcm_.get(), -8);
+                int pcmP = 0;
+                for (int i = 0; i < ns; i++ , pcmP += stride) {
+                    encoder.x[xt + i] = pcm_.get(pcmP) >>> 8;
+                    encoder.x[xs + i] = lc3_ldexpf(pcm_.get(pcmP), -8);
                 }
             }
             /**
@@ -413,11 +415,12 @@ class Lc3 {
                 int xs = decoder.xs_off; // decoder.x
                 int ns = lc3_ns(dt, sr);
 
-                for (; ns > 0; ns--, xs++ /*, pcm += stride */) { // TODO consider stride
+                int pcmP = 0;
+                for (; ns > 0; ns--, xs++ , pcmP += stride) {
                     int s = decoder.x[xs] >= 0
                             ? (int) (lc3_ldexpf(decoder.x[xs], 8) + 0.5f)
                             : (int) (lc3_ldexpf(decoder.x[xs], 8) - 0.5f);
-                    pcm_.put(LC3_SAT24(s));
+                    pcm_.put(pcmP, LC3_SAT24(s));
                 }
             }
 
@@ -435,10 +438,11 @@ class Lc3 {
                 int xs = encoder.xs_off; // encoder.x
                 int ns = lc3_ns(dt, sr);
 
-                for (int i = 0; i < ns; i++ /*, pcm += 3 * stride */) { // TODO consider stride
-                    int in = ((pcm[0] & 0xff) << 8) |
-                            ((pcm[1] & 0xff) << 16) |
-                            ((pcm[2] & 0xff) << 24);
+                int pcmP = 0;
+                for (int i = 0; i < ns; i++ , pcmP += 3 * stride) {
+                    int in = ((pcm[pcmP + 0] & 0xff) << 8) |
+                            ((pcm[pcmP + 1] & 0xff) << 16) |
+                            ((pcm[pcmP + 2] & 0xff) << 24);
 
                     encoder.x[xt + i] = in >>> 16;
                     encoder.x[xs + i] = lc3_ldexpf(in, -16);
@@ -456,15 +460,15 @@ class Lc3 {
                 int xs = decoder.xs_off; // decoder.x
                 int ns = lc3_ns(dt, sr);
 
-                int pcmp = 0;
-                for (; ns > 0; ns--, xs++, pcmp += 3 * stride) {
+                int pcmP = 0;
+                for (; ns > 0; ns--, xs++, pcmP += 3 * stride) {
                     int s = decoder.x[xs] >= 0 ? (int) (lc3_ldexpf(decoder.x[xs], 8)+0.5f)
                             :(int) (lc3_ldexpf(decoder.x[xs], 8)-0.5f);
 
                     s = LC3_SAT24(s);
-                    pcm_[pcmp + 0] = (byte) ((s >> 0) & 0xff);
-                    pcm_[pcmp + 1] = (byte) ((s >> 8) & 0xff);
-                    pcm_[pcmp + 2] = (byte) ((s >> 16) & 0xff);
+                    pcm_[pcmP + 0] = (byte) ((s >> 0) & 0xff);
+                    pcm_[pcmP + 1] = (byte) ((s >> 8) & 0xff);
+                    pcm_[pcmP + 2] = (byte) ((s >> 16) & 0xff);
                 }
             }
         },
@@ -482,8 +486,9 @@ class Lc3 {
                 int xs = encoder.xs_off; // encoder.x
                 int ns = lc3_ns(dt, sr);
 
-                for (int i = 0; i < ns; i++ /* , pcm += stride */) { // TODO consider stride
-                    encoder.x[xs + i] = lc3_ldexpf(pcm_.get(), 15);
+                int pcmP = 0;
+                for (int i = 0; i < ns; i++, pcmP += stride) {
+                    encoder.x[xs + i] = lc3_ldexpf(pcm_.get(pcmP), 15);
                     encoder.x[xt + i] = LC3_SAT16((int) encoder.x[xs + i]);
                 }
             }
@@ -499,9 +504,10 @@ class Lc3 {
                 int xs = decoder.xs_off; // decoder.x
                 int ns = lc3_ns(dt, sr);
 
-                for (; ns > 0; ns--, xs++ /*, pcm += stride */) { // TODO consider stride
+                int pcmP = 0;
+                for (; ns > 0; ns--, xs++, pcmP += stride) {
                     float s = lc3_ldexpf(decoder.x[xs], -15);
-                    pcm_.put(Math.min(Math.max(s, -1.f), 1.f));
+                    pcm_.put(pcmP, Math.min(Math.max(s, -1.f), 1.f));
                 }
             }
         };
@@ -590,9 +596,9 @@ class Lc3 {
         Duration dt;
         SRate sr, sr_pcm;
 
-        Analysis attdet = new Analysis();
-        Ltpf.Analysis ltpf = new Ltpf.Analysis();
-        Spec.Analysis spec = new Spec.Analysis();
+        final Analysis attdet = new Analysis();
+        final Ltpf.Analysis ltpf = new Ltpf.Analysis();
+        final Spec.Analysis spec = new Spec.Analysis();
 
         int xt_off, xs_off, xd_off;
         float[] x = new float[1];
@@ -617,7 +623,7 @@ class Lc3 {
         Duration dt;
         SRate sr, sr_pcm;
 
-        Synthesis ltpf = new Synthesis();
+        final Synthesis ltpf = new Synthesis();
         Plc plc;
 
         int xh_off, xs_off, xd_off, xg_off;
@@ -640,10 +646,10 @@ class Lc3 {
 
         BandWidth bw;
         boolean pitch_present;
-        Ltpf ltpf = new Ltpf();
+        final Ltpf ltpf = new Ltpf();
         Sns sns;
-        Tns tns = new Tns();
-        Spec spec = new Spec();
+        final Tns tns = new Tns();
+        final Spec spec = new Spec();
     }
 
     //
@@ -654,13 +660,13 @@ class Lc3 {
      * Resolve frame duration in us
      *
      * @param us     Frame duration in us
-     * @param hrmode High-resolution mode indication
+     * @param hrMode High-resolution mode indication
      * @return Frame duration identifier, or null
      */
-    private static Duration resolve_dt(int us, boolean hrmode) {
+    private static Duration resolve_dt(int us, boolean hrMode) {
         return us == 2500 ? Duration._2M5 :
                 us == 5000 ? Duration._5M :
-                        !hrmode && us == 7500 ? Duration._7M5 :
+                        !hrMode && us == 7500 ? Duration._7M5 :
                                 us == 10000 ? Duration._10M : null;
     }
 
@@ -668,27 +674,27 @@ class Lc3 {
      * Resolve samplerate in Hz
      *
      * @param hz     Samplerate in Hz
-     * @param hrmode High-resolution mode indication
+     * @param hrMode High-resolution mode indication
      * @return Sample rate identifier, or null
      */
-    private static SRate resolve_srate(int hz, boolean hrmode) {
-        hrmode = LC3_PLUS_HR && hrmode;
+    private static SRate resolve_srate(int hz, boolean hrMode) {
+        hrMode = LC3_PLUS_HR && hrMode;
 
-        return !hrmode && hz == 8000 ? _8K :
-                !hrmode && hz == 16000 ? _16K :
-                        !hrmode && hz == 24000 ? _24K :
-                                !hrmode && hz == 32000 ? _32K :
-                                        !hrmode && hz == 48000 ? _48K :
-                                                hrmode && hz == 48000 ? _48K_HR :
-                                                        hrmode && hz == 96000 ? _96K_HR : null;
+        return !hrMode && hz == 8000 ? _8K :
+                !hrMode && hz == 16000 ? _16K :
+                        !hrMode && hz == 24000 ? _24K :
+                                !hrMode && hz == 32000 ? _32K :
+                                        !hrMode && hz == 48000 ? _48K :
+                                                hrMode && hz == 48000 ? _48K_HR :
+                                                        hrMode && hz == 96000 ? _96K_HR : null;
     }
 
     /**
      * Return the number of PCM samples in a frame
      */
-    static int lc3_hr_frame_samples(boolean hrmode, int dt_us, int sr_hz) {
-        Duration dt = resolve_dt(dt_us, hrmode);
-        SRate sr = resolve_srate(sr_hz, hrmode);
+    static int lc3_hr_frame_samples(boolean hrMode, int dt_us, int sr_hz) {
+        Duration dt = resolve_dt(dt_us, hrMode);
+        SRate sr = resolve_srate(sr_hz, hrMode);
 
         if (dt == null || sr == null)
             return -1;
@@ -701,57 +707,57 @@ class Lc3 {
     }
 
     /**
-     * Return the size of frames or frame blocks, from bitrate
+     * Return the size of frames or frame blocks, from bitRate
      */
-    private static int lc3_hr_frame_block_bytes(boolean hrmode, int dt_us, int sr_hz, int nchannels, int bitrate) {
-        Duration dt = resolve_dt(dt_us, hrmode);
-        SRate sr = resolve_srate(sr_hz, hrmode);
+    private static int lc3_hr_frame_block_bytes(boolean hrMode, int dt_us, int sr_hz, int nChannels, int bitRate) {
+        Duration dt = resolve_dt(dt_us, hrMode);
+        SRate sr = resolve_srate(sr_hz, hrMode);
 
-        if (dt == null || sr == null || nchannels < 1 || nchannels > 8 || bitrate < 0)
+        if (dt == null || sr == null || nChannels < 1 || nChannels > 8 || bitRate < 0)
             return -1;
 
-        bitrate = clip(bitrate, 0, 8 * LC3_HR_MAX_BITRATE);
+        bitRate = clip(bitRate, 0, 8 * LC3_HR_MAX_BITRATE);
 
-        return clip((bitrate * (1 + dt.ordinal())) / 3200,
-                nchannels * lc3_min_frame_bytes(dt, sr),
-                nchannels * lc3_max_frame_bytes(dt, sr));
+        return clip((bitRate * (1 + dt.ordinal())) / 3200,
+                nChannels * lc3_min_frame_bytes(dt, sr),
+                nChannels * lc3_max_frame_bytes(dt, sr));
     }
 
-    private static int lc3_frame_bock_bytes(int dt_us, int nchannels, int bitrate) {
-        return lc3_hr_frame_block_bytes(false, dt_us, 8000, nchannels, bitrate);
+    private static int lc3_frame_bock_bytes(int dt_us, int nChannels, int bitRate) {
+        return lc3_hr_frame_block_bytes(false, dt_us, 8000, nChannels, bitRate);
     }
 
-    private static int lc3_hr_frame_bytes(boolean hrmode, int dt_us, int sr_hz, int bitrate) {
-        return lc3_hr_frame_block_bytes(hrmode, dt_us, sr_hz, 1, bitrate);
+    private static int lc3_hr_frame_bytes(boolean hrMode, int dt_us, int sr_hz, int bitRate) {
+        return lc3_hr_frame_block_bytes(hrMode, dt_us, sr_hz, 1, bitRate);
     }
 
-    private static int lc3_frame_bytes(int dt_us, int bitrate) {
-        return lc3_hr_frame_bytes(false, dt_us, 8000, bitrate);
+    private static int lc3_frame_bytes(int dt_us, int bitRate) {
+        return lc3_hr_frame_bytes(false, dt_us, 8000, bitRate);
     }
 
     /**
      * Resolve the bitrate, from the size of frames or frame blocks
      */
-    private static int lc3_hr_resolve_bitrate(boolean hrmode, int dt_us, int sr_hz, int nbytes) {
-        Duration dt = resolve_dt(dt_us, hrmode);
-        SRate sr = resolve_srate(sr_hz, hrmode);
+    private static int lc3_hr_resolve_bitrate(boolean hrMode, int dt_us, int sr_hz, int nBytes) {
+        Duration dt = resolve_dt(dt_us, hrMode);
+        SRate sr = resolve_srate(sr_hz, hrMode);
 
-        if (dt == null || sr == null || nbytes < 0)
+        if (dt == null || sr == null || nBytes < 0)
             return -1;
 
-        return (int) Math.min(((long) nbytes * 3200 + dt.ordinal()) / (1 + dt.ordinal()), Integer.MAX_VALUE);
+        return (int) Math.min(((long) nBytes * 3200 + dt.ordinal()) / (1 + dt.ordinal()), Integer.MAX_VALUE);
     }
 
-    private static int lc3_resolve_bitrate(int dt_us, int nbytes) {
-        return lc3_hr_resolve_bitrate(false, dt_us, 8000, nbytes);
+    private static int lc3_resolve_bitrate(int dt_us, int nBytes) {
+        return lc3_hr_resolve_bitrate(false, dt_us, 8000, nBytes);
     }
 
     /**
      * Return algorithmic delay, as a number of samples
      */
-    static int lc3_hr_delay_samples(boolean hrmode, int dt_us, int sr_hz) {
-        Duration dt = resolve_dt(dt_us, hrmode);
-        SRate sr = resolve_srate(sr_hz, hrmode);
+    static int lc3_hr_delay_samples(boolean hrMode, int dt_us, int sr_hz) {
+        Duration dt = resolve_dt(dt_us, hrMode);
+        SRate sr = resolve_srate(sr_hz, hrMode);
 
         if (dt == null || sr == null)
             return -1;
@@ -789,9 +795,9 @@ class Lc3 {
 
         // Temporal
 
-        boolean att = lc3_attdet_run(dt, sr_pcm, nBytes, encoder.attdet, null /* encoder.x */, xt); // TODO null
+        boolean att = lc3_attdet_run(dt, sr_pcm, nBytes, encoder.attdet, null /* encoder.x */, xt); // TODO implement null
 
-        side.pitch_present = side.ltpf.lc3_ltpf_analyse(dt, sr_pcm, encoder.ltpf, null /* encoder.x */, xt); // TODO null
+        side.pitch_present = side.ltpf.lc3_ltpf_analyse(dt, sr_pcm, encoder.ltpf, null /* encoder.x */, xt); // TODO implement null
 
         System.arraycopy(encoder.x, xt + (ns - nt), encoder.x, xt - nt, nt);
 //        Arrays.fill(encoder.x, xt + (ns - nt), nt, 0);
@@ -820,17 +826,17 @@ class Lc3 {
      *
      * @param encoder Encoder state
      * @param side    The frame data
-     * @param nbytes  Target size of the frame (20 to 400)
-     * @param buffer  Output bitstream buffer of `nbytes` size
+     * @param nBytes  Target size of the frame (20 to 400)
+     * @param buffer  Output bitstream buffer of `nBytes` size
      */
-    static void encode(Encoder encoder, Side side, int nbytes, byte[] buffer, int offset) {
+    static void encode(Encoder encoder, Side side, int nBytes, byte[] buffer, int offset) {
         Duration dt = encoder.dt;
         SRate sr = encoder.sr;
 
         int xf = encoder.xs_off; // encoder.x
         BandWidth bw = side.bw;
 
-        Bits bits = new Bits(Mode.WRITE, buffer, offset, nbytes);
+        Bits bits = new Bits(Mode.WRITE, buffer, offset, nBytes);
 
         lc3_bwdet_put_bw(bits, sr, bw);
 
@@ -845,7 +851,7 @@ class Lc3 {
         if (side.pitch_present)
             side.ltpf.lc3_ltpf_put_data(bits);
 
-        side.spec.lc3_spec_encode(bits, dt, sr, bw, nbytes, encoder.x, xf);
+        side.spec.lc3_spec_encode(bits, dt, sr, bw, nBytes, encoder.x, xf);
 
         bits.lc3_flush_bits();
     }
@@ -853,9 +859,9 @@ class Lc3 {
     /**
      * Return size needed for an encoder
      */
-    static int lc3_hr_encoder_size(boolean hrmode, int dt_us, int sr_hz) {
-        Duration dt = resolve_dt(dt_us, hrmode);
-        SRate sr = resolve_srate(sr_hz, hrmode);
+    static int lc3_hr_encoder_size(boolean hrMode, int dt_us, int sr_hz) {
+        Duration dt = resolve_dt(dt_us, hrMode);
+        SRate sr = resolve_srate(sr_hz, hrMode);
         if (dt == null || sr == null)
             return 0;
 
@@ -870,13 +876,13 @@ class Lc3 {
      * Setup encoder
      * @param mem unused
      */
-    static Encoder lc3_hr_setup_encoder(boolean hrmode, int dt_us, int sr_hz, int sr_pcm_hz, byte[] mem) {
+    static Encoder lc3_hr_setup_encoder(boolean hrMode, int dt_us, int sr_hz, int sr_pcm_hz, byte[] mem) {
         if (sr_pcm_hz <= 0)
             sr_pcm_hz = sr_hz;
 
-        Duration dt = resolve_dt(dt_us, hrmode);
-        SRate sr = resolve_srate(sr_hz, hrmode);
-        SRate sr_pcm = resolve_srate(sr_pcm_hz, hrmode);
+        Duration dt = resolve_dt(dt_us, hrMode);
+        SRate sr = resolve_srate(sr_hz, hrMode);
+        SRate sr_pcm = resolve_srate(sr_pcm_hz, hrMode);
 
         if (dt == null || sr_pcm == null || sr != null && sr.ordinal() > sr_pcm.ordinal() || mem == null)
             return null;
@@ -1043,9 +1049,9 @@ class Lc3 {
     /**
      * Return size needed for a decoder
      */
-    static int lc3_hr_decoder_size(boolean hrmode, int dt_us, int sr_hz) {
-        Duration dt = resolve_dt(dt_us, hrmode);
-        SRate sr = resolve_srate(sr_hz, hrmode);
+    static int lc3_hr_decoder_size(boolean hrMode, int dt_us, int sr_hz) {
+        Duration dt = resolve_dt(dt_us, hrMode);
+        SRate sr = resolve_srate(sr_hz, hrMode);
         if (dt == null || sr == null)
             return 0;
 
@@ -1059,13 +1065,13 @@ class Lc3 {
     /**
      * Setup decoder
      */
-    static Decoder lc3_hr_setup_decoder(boolean hrmode, int dt_us, int sr_hz, int sr_pcm_hz) {
+    static Decoder lc3_hr_setup_decoder(boolean hrMode, int dt_us, int sr_hz, int sr_pcm_hz) {
         if (sr_pcm_hz <= 0)
             sr_pcm_hz = sr_hz;
 
-        Duration dt = resolve_dt(dt_us, hrmode);
-        SRate sr = resolve_srate(sr_hz, hrmode);
-        SRate sr_pcm = resolve_srate(sr_pcm_hz, hrmode);
+        Duration dt = resolve_dt(dt_us, hrMode);
+        SRate sr = resolve_srate(sr_hz, hrMode);
+        SRate sr_pcm = resolve_srate(sr_pcm_hz, hrMode);
 
         if (dt == null || sr_pcm == null || (sr != null && sr.ordinal() > sr_pcm.ordinal()))
             return null;

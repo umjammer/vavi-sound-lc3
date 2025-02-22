@@ -170,8 +170,8 @@ class Tables {
 
     static class lc3_fft_bf3_twiddles {
 
-        int n3;
-        Complex[][] t; // = new Complex[][2]
+        final int n3;
+        final Complex[][] t; // = new Complex[][2]
 
         public lc3_fft_bf3_twiddles(int n3, float[][][] f) {
             this.n3 = n3;
@@ -185,8 +185,8 @@ class Tables {
 
     static class lc3_fft_bf2_twiddles {
 
-        int n2;
-        Complex[] t;
+        final int n2;
+        final Complex[] t;
 
         public lc3_fft_bf2_twiddles(int n2, String f) {
             this.n2 = n2;
@@ -202,8 +202,8 @@ class Tables {
 
     static class lc3_mdct_rot_def {
 
-        int n4;
-        Complex[] w;
+        final int n4;
+        final Complex[] w;
 
         public lc3_mdct_rot_def(int n4, String f) {
             this.n4 = n4;

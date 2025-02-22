@@ -241,13 +241,13 @@ class Spec {
      * @param dt           Duration  of the frame
      * @param sr           sampleRate of the frame
      * @param g_idx        The estimated quantized gain index
-     * @param nbits        Computed number of bits coding the spectrum
-     * @param nbits_budget Number of bits available for coding the spectrum
+     * @param nBits        Computed number of bits coding the spectrum
+     * @param nBits_budget Number of bits available for coding the spectrum
      * @param g_idx_min    Minimum gain index value
      * @return Gain adjust value (-1 to 2)
      */
     private static int adjust_gain(Duration dt, SRate sr,
-                                   int g_idx, int nbits, int nbits_budget, int g_idx_min) {
+                                   int g_idx, int nBits, int nBits_budget, int g_idx_min) {
 
         // Compute delta threshold
 
@@ -259,35 +259,35 @@ class Spec {
 
         int delta, den = 48;
 
-        if (nbits < t[0]) {
-            delta = 3 * (nbits + 48);
+        if (nBits < t[0]) {
+            delta = 3 * (nBits + 48);
 
-        } else if (nbits < t[1]) {
+        } else if (nBits < t[1]) {
             int n0 = 3 * (t[0] + 48), range = t[1] - t[0];
-            delta = n0 * range + (nbits - t[0]) * (t[1] - n0);
+            delta = n0 * range + (nBits - t[0]) * (t[1] - n0);
             den *= range;
 
         } else {
-            delta = Math.min(nbits, t[2]);
+            delta = Math.min(nBits, t[2]);
         }
 
         delta = (delta + den / 2) / den;
 
         // Adjust gain
 
-        if (isHR(sr) && nbits > nbits_budget) {
+        if (isHR(sr) && nBits > nBits_budget) {
             int factor = 1 + (dt.ordinal() <= _5M.ordinal() ? 1 : 0) +
-                    (dt.ordinal() <= _2M5.ordinal() ? 1 : 0) * (1 + (nbits >= 520 ? 1 : 0));
+                    (dt.ordinal() <= _2M5.ordinal() ? 1 : 0) * (1 + (nBits >= 520 ? 1 : 0));
 
-            int g_incr = factor + (factor * (nbits - nbits_budget)) / delta;
+            int g_incr = factor + (factor * (nBits - nBits_budget)) / delta;
             return Math.min(g_idx + g_incr, 255) - g_idx;
         }
 
-        if (!isHR(sr) && nbits < nbits_budget - (delta + 2))
+        if (!isHR(sr) && nBits < nBits_budget - (delta + 2))
             return -(g_idx > g_idx_min ? 1 : 0);
 
-        if (!isHR(sr) && nbits > nbits_budget)
-            return (g_idx < 255 ? 1 : 0) + (g_idx < 254 && nbits >= nbits_budget + delta ? 1 : 0);
+        if (!isHR(sr) && nBits > nBits_budget)
+            return (g_idx < 255 ? 1 : 0) + (g_idx < 254 && nBits >= nBits_budget + delta ? 1 : 0);
 
         return 0;
     }
@@ -323,7 +323,7 @@ class Spec {
      * @param sr    sampleRate of the frame
      * @param g_int Quantization gain value
      * @param x     Spectral quantized of significants
-     * @param nq    count of significants
+     * @param nq    count of significant
      * @return Unquantized gain value
      */
     private static float unquantize(Duration dt, SRate sr, int g_int, float[] x, int xp, int nq) {
@@ -365,33 +365,33 @@ class Spec {
      *
      * @param dt           Duration of the frame
      * @param sr           sampleRate of the frame
-     * @param nbytes       size of the frame
+     * @param nBytes       size of the frame
      * @param x            Spectral quantized coefficients
-     * @param nbits_budget Truncate to stay in budget, when not zero
+     * @param nBits_budget Truncate to stay in budget, when not zero
      * @param p_lsb_mode   set {@link #lsb_mode} True when LSB's are not AC coded, or false
      * @return The number of bits coding the spectrum
      */
-    private int compute_nbits(Duration dt, SRate sr, int nbytes,
-                              float[] x, int nbits_budget, boolean p_lsb_mode) {
+    private int compute_nbits(Duration dt, SRate sr, int nBytes,
+                              float[] x, int nBits_budget, boolean p_lsb_mode) {
 
         boolean[] lsb_mode = new boolean[1];
-        boolean high_rate = resolve_modes(sr, nbytes, lsb_mode);
+        boolean high_rate = resolve_modes(sr, nBytes, lsb_mode);
         int ne = lc3_ne(dt, sr);
 
         // Loop on quantized coefficients
 
-        int nbits = 0, nbits_lsb = 0;
-        byte state = 0;
+        int nBits = 0, nBits_lsb = 0;
+        int state = 0;
 
-        int nbits_end = 0;
+        int nBits_end = 0;
         int n_end = 0;
 
-        nbits_budget = nbits_budget != 0 ? nbits_budget * 2048 : Integer.MAX_VALUE;
+        nBits_budget = nBits_budget != 0 ? nBits_budget * 2048 : Integer.MAX_VALUE;
 
         for (int i = 0, h = 0; h < 2; h++) {
             byte[/* 4 */][] lut_coeff = lc3_spectrum_lookup[high_rate ? 1 : 0][h];
 
-            for (; i < Math.min(this.nq, (ne + 2) >> (1 - h)) && nbits <= nbits_budget; i += 2) {
+            for (; i < Math.min(this.nq, (ne + 2) >> (1 - h)) && nBits <= nBits_budget; i += 2) {
 
                 float xq_off = isHR(sr) ? 0.5f : 6.f / 16;
                 int a = (int) (Math.abs(x[i + 0]) + xq_off);
@@ -402,13 +402,13 @@ class Spec {
                 // Sign values
 
                 int s = (a != 0 ? 1 : 0) + (b != 0 ? 1 : 0);
-                nbits += s * 2048;
+                nBits += s * 2048;
 
-                /* --- LSB values Reduce to 2*2 bits MSB values ---
-                 * Reduce to 2x2 bits MSB values. The LSB's pair are arithmetic
-                 * coded with an escape code followed by 1 bit for each values.
-                 * The LSB mode does not arthmetic code the first LSB,
-                 * add the sign of the LSB when one of pair was at value 1 */
+                // --- LSB values Reduce to 2*2 bits MSB values ---
+                // Reduce to 2x2 bits MSB values. The LSB's pair are arithmetic
+                // coded with an escape code followed by 1 bit for each value.
+                // The LSB mode does not arithmetic code the first LSB,
+                // add the sign of the LSB when one of pair was at value 1
 
                 int m = (a | b) >> 2;
                 int k = 0;
@@ -416,14 +416,14 @@ class Spec {
                 if (m != 0) {
 
                     if (lsb_mode[0]) {
-                        nbits += lc3_spectrum_bits[lut[k++]][16] - 2 * 2048;
-                        nbits_lsb += 2 + (a == 1 ? 1 : 0) + (b == 1 ? 1 : 0);
+                        nBits += lc3_spectrum_bits[lut[k++]][16] - 2 * 2048;
+                        nBits_lsb += 2 + (a == 1 ? 1 : 0) + (b == 1 ? 1 : 0);
                     }
 
                     for (m >>= lsb_mode[0] ? 1 : 0; m != 0; m >>= 1, k++)
-                        nbits += lc3_spectrum_bits[lut[Math.min(k, 3)]][16];
+                        nBits += lc3_spectrum_bits[lut[Math.min(k, 3)]][16];
 
-                    nbits += k * 2 * 2048;
+                    nBits += k * 2 * 2048;
                     a >>= k;
                     b >>= k;
 
@@ -432,16 +432,16 @@ class Spec {
 
                 // MSB values
 
-                nbits += lc3_spectrum_bits[lut[k]][a + 4 * b];
+                nBits += lc3_spectrum_bits[lut[k]][a + 4 * b];
 
                 // Update state
 
-                if (s != 0 && nbits <= nbits_budget) {
+                if (s != 0 && nBits <= nBits_budget) {
                     n_end = i + 2;
-                    nbits_end = nbits;
+                    nBits_end = nBits;
                 }
 
-                state = (byte) ((state << 4) + (k > 1 ? 12 + k : 1 + (a + b) * (k + 1)));
+                state = (state << 4) + (k > 1 ? 12 + k : 1 + (a + b) * (k + 1));
             }
         }
 
@@ -450,27 +450,27 @@ class Spec {
         this.nq = n_end;
 
         if (p_lsb_mode)
-            this.lsb_mode = lsb_mode[0] && nbits_end + nbits_lsb * 2048 > nbits_budget;
+            this.lsb_mode = lsb_mode[0] && nBits_end + nBits_lsb * 2048 > nBits_budget;
 
-        if (nbits_budget >= Integer.MAX_VALUE)
-            nbits_end += nbits_lsb * 2048;
+        if (nBits_budget >= Integer.MAX_VALUE)
+            nBits_end += nBits_lsb * 2048;
 
-        return (nbits_end + 2047) / 2048;
+        return (nBits_end + 2047) / 2048;
     }
 
     /**
      * Put quantized spectrum
      *
      * @param bits Bitstream context
-     * @param dt,  sr, nbytes  Duration, sampleRate and size of the frame
+     * @param dt,  sr, nBytes  Duration, sampleRate and size of the frame
      * @param x    Spectral quantized coefficients
-     * @param nq,  lsb_mode    Count of significants, and LSB discard indication
+     * @param nq,  lsb_mode    Count of significant, and LSB discard indication
      */
     private static void put_quantized(Bits bits,
-                                      Duration dt, SRate sr, int nbytes,
+                                      Duration dt, SRate sr, int nBytes,
                                       float[] x, int xp, int nq, boolean lsb_mode) {
 
-        boolean high_rate = resolve_modes(sr, nbytes, null);
+        boolean high_rate = resolve_modes(sr, nBytes, null);
         int ne = lc3_ne(dt, sr);
 
         // Loop on quantized coefficients
@@ -538,7 +538,7 @@ class Spec {
      *
      * @param bits    Bitstream context
      * @param dt,     sr, nBytes  Duration, sampleRate and size of the frame
-     * @param nq,     lsb_mode    Count of significants, and LSB discard indication
+     * @param nq,     lsb_mode    Count of significant, and LSB discard indication
      * @param x       Return `nq` spectral quantized coefficients
      * @param nf_seed Return the noise factor seed associated
      * @return 0: Ok  -1: Invalid bitstream data
@@ -616,17 +616,17 @@ class Spec {
      * Put residual bits of quantization
      *
      * @param bits   Bitstream context
-     * @param nbits  Maximum number of bits to output
-     * @param hrmode High-Resolution mode
+     * @param nBits  Maximum number of bits to output
+     * @param hrMode High-Resolution mode
      * @param x      Spectral quantized
      * @param n      count of significants
      */
-    private static void put_residual(Bits bits, int nbits, boolean hrmode, float[] x, int xp, int n) {
-        float xq_lim = hrmode ? 0.5f : 10.f / 16;
+    private static void put_residual(Bits bits, int nBits, boolean hrMode, float[] x, int xp, int n) {
+        float xq_lim = hrMode ? 0.5f : 10.f / 16;
         float xq_off = xq_lim / 2;
 
-        for (int iter = 0; iter < (hrmode ? 20 : 1) && nbits > 0; iter++) {
-            for (int i = 0; i < n && nbits > 0; i++) {
+        for (int iter = 0; iter < (hrMode ? 20 : 1) && nBits > 0; iter++) {
+            for (int i = 0; i < n && nBits > 0; i++) {
 
                 float xr = Math.abs(x[xp + i]);
                 if (xr < xq_lim)
@@ -634,7 +634,7 @@ class Spec {
 
                 boolean b = (xr - Math.floor(xr) < xq_lim) ^ (x[xp + i] < 0);
                 bits.lc3_put_bit(b ? 1 : 0);
-                nbits--;
+                nBits--;
 
                 x[xp + i] += b ? -xq_off : xq_off;
             }
@@ -647,17 +647,17 @@ class Spec {
      * Get residual bits of quantization
      *
      * @param bits   Bitstream context
-     * @param nbits  Maximum number of bits to output
-     * @param hrmode High-Resolution mode
+     * @param nBits  Maximum number of bits to output
+     * @param hrMode High-Resolution mode
      * @param x      Spectral quantized
      * @param n      count of significants
      */
-    private static void get_residual(Bits bits, int nbits, boolean hrmode, float[] x, int xp, int n) {
-        float xq_off_1 = hrmode ? 0.25f : 5.f / 16;
-        float xq_off_2 = hrmode ? 0.25f : 3.f / 16;
+    private static void get_residual(Bits bits, int nBits, boolean hrMode, float[] x, int xp, int n) {
+        float xq_off_1 = hrMode ? 0.25f : 5.f / 16;
+        float xq_off_2 = hrMode ? 0.25f : 3.f / 16;
 
-        for (int iter = 0; iter < (hrmode ? 20 : 1) && nbits > 0; iter++) {
-            for (int i = 0; i < n && nbits > 0; i++) {
+        for (int iter = 0; iter < (hrMode ? 20 : 1) && nBits > 0; iter++) {
+            for (int i = 0; i < n && nBits > 0; i++) {
 
                 if (x[xp + i] == 0)
                     continue;
@@ -667,7 +667,7 @@ class Spec {
                 else
                     x[xp + i] += x[xp + i] > 0 ? xq_off_1 : xq_off_2;
 
-                nbits--;
+                nBits--;
             }
 
             xq_off_1 *= 0.5f;
@@ -713,8 +713,8 @@ class Spec {
      *
      * @param bits    Bitstream context
      * @param nbits   Maximum number of bits to output
-     * @param x       Spectral quantized of significants
-     * @param nq      count of significants
+     * @param x       Spectral quantized of significant
+     * @param nq      count of significant
      * @param nf_seed Update the noise factor seed according
      */
     private static void get_lsb(Bits bits, int nbits, float[] x, int xp, int nq, short[] nf_seed) {
@@ -758,7 +758,7 @@ class Spec {
      * @param bw     Duration of the frame
      * @param hrMode High-Resolution mode
      * @param x      Spectral quantized
-     * @param n      count of significants
+     * @param n      count of significant
      * @return Noise factor (0 to 7)
      */
     private static int estimate_noise(Duration dt, BandWidth bw, boolean hrMode, float[] x, int xp, int n) {
@@ -796,7 +796,7 @@ class Spec {
      * @param nf_seed pseudo-random seed
      * @param g       Quantization gain
      * @param x       Spectral quantized
-     * @param nq      and count of significants
+     * @param nq      and count of significant
      */
     private static void fill_noise(Duration dt, BandWidth bw, int nf, short nf_seed, float g, float[] x, int xp, int nq) {
 
@@ -850,7 +850,7 @@ class Spec {
      *
      * @param dt  Duration of the frame
      * @param sr  sampleRate of the frame
-     * @return Bit consumpution of the number of coded coefficients
+     * @return Bit consumption of the number of coded coefficients
      */
     private static int get_nbits_nq(Duration dt, SRate sr) {
         int ne = lc3_ne(dt, sr);
@@ -884,7 +884,7 @@ class Spec {
      * @param sr,    sampleRate
      * @param nBytes size of the frame
      * @param pitch  Pitch present indication
-     * @param tns    TNS bistream data
+     * @param tns    TNS bitstream data
      * @param spec   Context of analysis
      * @param x      Spectral coefficients, scaled as output
      */
@@ -896,23 +896,23 @@ class Spec {
 
         // Bit budget
 
-        final int nbits_gain = 8;
-        final int nbits_nf = 3;
+        final int nBits_gain = 8;
+        final int nBits_nf = 3;
 
-        int nbits_budget = 8 * nBytes - get_nbits_ac(dt, sr, nBytes) -
+        int nBits_budget = 8 * nBytes - get_nbits_ac(dt, sr, nBytes) -
                 lc3_bwdet_get_nbits(sr) - lc3_ltpf_get_nbits(pitch) -
-                lc3_sns_get_nbits() - tns.lc3_tns_get_nbits() - nbits_gain - nbits_nf;
+                lc3_sns_get_nbits() - tns.lc3_tns_get_nbits() - nBits_gain - nBits_nf;
 
         // Global gain
 
-        float nbits_off = spec.nbits_off + spec.nbits_spare;
-        nbits_off = Math.min(Math.max(nbits_off, -40), 40);
-        nbits_off = 0.8f * spec.nbits_off + 0.2f * nbits_off;
+        float nBits_off = spec.nbits_off + spec.nbits_spare;
+        nBits_off = Math.min(Math.max(nBits_off, -40), 40);
+        nBits_off = 0.8f * spec.nbits_off + 0.2f * nBits_off;
 
         int g_off = resolve_gain_offset(sr, nBytes);
 
         int[] g_min = new int[1];
-        int g_int = estimate_gain(dt, sr, x, xp, nBytes, nbits_budget, nbits_off, g_off, reset_off, g_min);
+        int g_int = estimate_gain(dt, sr, x, xp, nBytes, nBits_budget, nBits_off, g_off, reset_off, g_min);
 
         // Quantization
 
@@ -920,18 +920,18 @@ class Spec {
 
         int nbits = compute_nbits(dt, sr, nBytes, x, 0, false);
 
-        spec.nbits_off = reset_off[0] ? 0 : nbits_off;
-        spec.nbits_spare = reset_off[0] ? 0 : nbits_budget - nbits;
+        spec.nbits_off = reset_off[0] ? 0 : nBits_off;
+        spec.nbits_spare = reset_off[0] ? 0 : nBits_budget - nbits;
 
         // Adjust gain and requantize
 
-        int g_adj = adjust_gain(dt, sr, g_off + g_int, nbits, nbits_budget, g_off + g_min[0]);
+        int g_adj = adjust_gain(dt, sr, g_off + g_int, nbits, nBits_budget, g_off + g_min[0]);
 
         if (g_adj != 0)
             quantize(dt, sr, g_adj, x);
 
         this.g_idx = g_int + g_adj + g_off;
-        nbits = compute_nbits(dt, sr, nBytes, x, nbits_budget, true);
+        nbits = compute_nbits(dt, sr, nBytes, x, nBits_budget, true);
     }
 
 
@@ -943,9 +943,9 @@ class Spec {
      * @param sr   sampleRate of the frame
      */
     void lc3_spec_put_side(Bits bits, Duration dt, SRate sr) {
-        int nbits_nq = get_nbits_nq(dt, sr);
+        int nBits_nq = get_nbits_nq(dt, sr);
 
-        bits.lc3_put_bits(Math.max(this.nq >> 1, 1) - 1, nbits_nq);
+        bits.lc3_put_bits(Math.max(this.nq >> 1, 1) - 1, nBits_nq);
         bits.lc3_put_bits(this.lsb_mode ? 1 : 0, 1);
         bits.lc3_put_bits(this.g_idx, 8);
     }
@@ -969,12 +969,12 @@ class Spec {
 
         put_quantized(bits, dt, sr, nbytes, x, xp, nq, lsb_mode);
 
-        int nbits_left = bits.lc3_get_bits_left();
+        int nBits_left = bits.lc3_get_bits_left();
 
         if (lsb_mode)
-            put_lsb(bits, nbits_left, isHR(sr), x, xp, nq);
+            put_lsb(bits, nBits_left, isHR(sr), x, xp, nq);
         else
-            put_residual(bits, nbits_left, isHR(sr), x, xp, nq);
+            put_residual(bits, nBits_left, isHR(sr), x, xp, nq);
     }
 
     //
@@ -990,10 +990,10 @@ class Spec {
      * @return 0: Ok  -1: Invalid bandwidth indication
      */
     int lc3_spec_get_side(Bits bits, Duration dt, SRate sr) {
-        int nbits_nq = get_nbits_nq(dt, sr);
+        int nBits_nq = get_nbits_nq(dt, sr);
         int ne = lc3_ne(dt, sr);
 
-        this.nq = (bits.lc3_get_bits(nbits_nq) + 1) << 1;
+        this.nq = (bits.lc3_get_bits(nBits_nq) + 1) << 1;
         this.lsb_mode = bits.lc3_get_bit() != 0;
         this.g_idx = bits.lc3_get_bits(8);
 
@@ -1025,12 +1025,12 @@ class Spec {
         if ((ret = get_quantized(bits, dt, sr, nBytes, nq, lsb_mode, x, xp, nf_seed)) < 0)
             return ret;
 
-        int nbits_left = bits.lc3_get_bits_left();
+        int nBits_left = bits.lc3_get_bits_left();
 
         if (lsb_mode)
-            get_lsb(bits, nbits_left, x, xp, nq, nf_seed);
+            get_lsb(bits, nBits_left, x, xp, nq, nf_seed);
         else
-            get_residual(bits, nbits_left, isHR(sr), x, xp, nq);
+            get_residual(bits, nBits_left, isHR(sr), x, xp, nq);
 
         int g_int = this.g_idx - resolve_gain_offset(sr, nBytes);
         float g = unquantize(dt, sr, g_int, x, xp, nq);

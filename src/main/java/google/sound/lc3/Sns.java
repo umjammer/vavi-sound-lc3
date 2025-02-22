@@ -375,7 +375,7 @@ class Sns {
         scfSum += scf[15];
 
         float cf = isHR(sr) ? 0.6f : 0.85f;
-        if (isHR(sr) && 8 * nBytes > (dt.ordinal() < _10M.ordinal() ? 1150 * (int) (1 + dt.ordinal()) : 4400))
+        if (isHR(sr) && 8 * nBytes > (dt.ordinal() < _10M.ordinal() ? 1150 * (1 + dt.ordinal()) : 4400))
             cf *= dt.ordinal() < _10M.ordinal() ? 0.25f : 0.35f;
 
         for (int i = 0; i < 16; i++)
@@ -835,7 +835,7 @@ class Sns {
      * @param eb     Energy estimation per bands, and count of bands
      * @param att    1: Attack detected  0: Otherwise
      * @param x      Spectral coefficients
-     * @param y      Return shapped coefficients
+     * @param y      Return shaped coefficients
      */
     void lc3_sns_analyze(Duration dt, SRate sr, int nBytes, float[] eb, boolean att, float[] x, int xp, float[] y, int yp) {
 
@@ -979,7 +979,7 @@ class Sns {
      * @param dt   Duration and sampleRate of the frame
      * @param sr   Duration and sampleRate of the frame
      * @param x    Spectral coefficients
-     * @param y    Return shapped coefficients
+     * @param y    Return shaped coefficients
      */
     void lc3_sns_synthesize(Duration dt, SRate sr, float[] x, int xp, float[] y, int yp) {
         float[] scf = new float[16], cn = new float[16];
@@ -1200,8 +1200,8 @@ class Sns {
 
     private static class lc3_sns_vq_gains {
 
-        int count;
-        float[] v;
+        final int count;
+        final float[] v;
 
         public lc3_sns_vq_gains(int count, float[] v) {
             this.count = count;

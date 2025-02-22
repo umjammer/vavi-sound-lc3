@@ -314,7 +314,7 @@ class Energy {
 
     static final int LC3_MAX_BANDS = 64;
 
-    static Map<Duration, int[]> lc3_num_bands = Map.of(/* NUM_DURATION. NUM_SRATE */
+    static final Map<Duration, int[]> lc3_num_bands = Map.of(/* NUM_DURATION. NUM_SRATE */
 
             _2M5, new int[] {
                     band_lim_2m5_8k.length - 1,

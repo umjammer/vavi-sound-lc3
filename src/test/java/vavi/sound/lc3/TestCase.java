@@ -55,9 +55,9 @@ class TestCase {
         }
     }
 
-    static long time = System.getProperty("vavi.test", "").equals("ide") ? 1000 * 1000 : 10 * 1000;
+    static final long time = System.getProperty("vavi.test", "").equals("ide") ? 1000 * 1000 : 10 * 1000;
 
-    static double volume = Double.parseDouble(System.getProperty("vavi.test.volume",  "0.2"));
+    static final double volume = Double.parseDouble(System.getProperty("vavi.test.volume",  "0.2"));
 
     @Test
     @DisplayName("list available lines")

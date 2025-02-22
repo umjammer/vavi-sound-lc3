@@ -39,8 +39,8 @@ import static vavix.util.DelayedWorker.later;
  */
 class Lc3FormatConversionProviderTest {
 
-    static long time;
-    static double volume;
+    static final long time;
+    static final double volume;
 
     static {
         System.setProperty("vavi.util.logging.VaviFormatter.extraClassMethod", "org\\.tritonus\\.share\\.TDebug#out");

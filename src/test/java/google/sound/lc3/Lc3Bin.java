@@ -45,25 +45,25 @@ class Lc3Bin {
 
         int file_id;
         int header_size;
-        int srate_100hz;
-        int bitrate_100bps;
+        int sRate_100hz;
+        int bitRate_100bps;
         int channels;
         int frame_10us;
-        int epmode;
-        int nsamples_low;
-        int nsamples_high;
+        int epMode;
+        int nSamples_low;
+        int nSamples_high;
 
         @Override public String toString() {
             return new StringJoiner(", ", Lc3Header.class.getSimpleName() + "[", "]")
                     .add("file_id=" + Integer.toHexString(file_id))
                     .add("header_size=" + header_size)
-                    .add("srate_100hz=" + srate_100hz)
-                    .add("bitrate_100bps=" + bitrate_100bps)
+                    .add("sRate_100hz=" + sRate_100hz)
+                    .add("bitRate_100bps=" + bitRate_100bps)
                     .add("channels=" + channels)
                     .add("frame_10us=" + frame_10us)
-                    .add("epmode=" + epmode)
-                    .add("nsamples_low=" + nsamples_low)
-                    .add("nsamples_high=" + nsamples_high)
+                    .add("epMode=" + epMode)
+                    .add("nSamples_low=" + nSamples_low)
+                    .add("nSamples_high=" + nSamples_high)
                     .toString();
         }
     }
@@ -73,27 +73,27 @@ class Lc3Bin {
      *
      * @param fp        Opened file, moved after header on return
      * @param frame_us  Return frame duration, in us
-     * @param srate_hz  Return samplerate, in Hz
-     * @param hrmode    Return true when high-resolution mode enabled
-     * @param nchannels Return number of channels
-     * @param nsamples  Return count of source samples by channels
+     * @param sRate_hz  Return samplerate, in Hz
+     * @param hrMode    Return true when high-resolution mode enabled
+     * @param nChannels Return number of channels
+     * @param nSamples  Return count of source samples by channels
      * @return 0: Ok  -1: Bad LC3 File
      */
     static int lc3bin_read_header(InputStream fp,
-                                  int[] frame_us, int[] srate_hz, boolean[] hrmode, int[] nchannels, int[] nsamples) throws IOException {
+                                  int[] frame_us, int[] sRate_hz, boolean[] hrMode, int[] nChannels, int[] nSamples) throws IOException {
         Lc3Header hdr = new Lc3Header();
         int hdr_hrmode = 0;
 
         LittleEndianDataInputStream dis = new LittleEndianDataInputStream(fp);
         hdr.file_id = dis.readUnsignedShort();
         hdr.header_size = dis.readUnsignedShort();
-        hdr.srate_100hz = dis.readUnsignedShort();
-        hdr.bitrate_100bps = dis.readUnsignedShort();
+        hdr.sRate_100hz = dis.readUnsignedShort();
+        hdr.bitRate_100bps = dis.readUnsignedShort();
         hdr.channels = dis.readUnsignedShort();
         hdr.frame_10us = dis.readUnsignedShort();
-        hdr.epmode = dis.readUnsignedShort();
-        hdr.nsamples_low = dis.readUnsignedShort();
-        hdr.nsamples_high = dis.readUnsignedShort();
+        hdr.epMode = dis.readUnsignedShort();
+        hdr.nSamples_low = dis.readUnsignedShort();
+        hdr.nSamples_high = dis.readUnsignedShort();
 Debug.println("hdr: " + hdr);
 
         if (hdr.file_id != (LC3_FILE_ID & 0xffff) || hdr.header_size < 18) {
@@ -106,14 +106,14 @@ logger.log(Level.DEBUG, "illegal header id or size: " + hdr.file_id + ", " + LC3
             hdr_hrmode = dis.readUnsignedShort();
         }
 
-        nchannels[0] = hdr.channels;
+        nChannels[0] = hdr.channels;
         frame_us[0] = hdr.frame_10us * 10;
-        srate_hz[0] = hdr.srate_100hz * 100;
-        nsamples[0] = hdr.nsamples_low | (hdr.nsamples_high << 16);
-        hrmode[0] = hdr_hrmode != 0;
+        sRate_hz[0] = hdr.sRate_100hz * 100;
+        nSamples[0] = hdr.nSamples_low | (hdr.nSamples_high << 16);
+        hrMode[0] = hdr_hrmode != 0;
 
-        if (hdr.epmode != 0) {
-logger.log(Level.DEBUG, "illegal epmode");
+        if (hdr.epMode != 0) {
+logger.log(Level.DEBUG, "illegal epMode");
             return -1;
         }
 
@@ -151,40 +151,40 @@ logger.log(Level.WARNING, nBytes);
      *
      * @param fp        Opened file, moved after header on return
      * @param frame_us  Frame duration, in us
-     * @param srate_hz  Samplerate, in Hz
-     * @param hrmode    True when high-resolution mode enabled
-     * @param bitrate   Bitrate indication of the stream, in bps
-     * @param nchannels Number of channels
-     * @param nsamples  Count of source samples by channels
+     * @param sRate_hz  Samplerate, in Hz
+     * @param hrMode    True when high-resolution mode enabled
+     * @param bitRate   Bitrate indication of the stream, in bps
+     * @param nChannels Number of channels
+     * @param nSamples  Count of source samples by channels
      */
     static void lc3bin_write_header(OutputStream fp,
-                                    int frame_us, int srate_hz, boolean hrmode,
-                                    int bitrate, int nchannels, int nsamples) throws IOException {
-        int hdr_hrmode = (hrmode ? 1 : 0);
+                                    int frame_us, int sRate_hz, boolean hrMode,
+                                    int bitRate, int nChannels, int nSamples) throws IOException {
+        int hdr_hrMode = (hrMode ? 1 : 0);
 
         Lc3Header header = new Lc3Header();
         header.file_id = LC3_FILE_ID;
-        header.header_size = (short) (18 + (hrmode ? Short.BYTES : 0));
-        header.srate_100hz = (short) (srate_hz / 100);
-        header.bitrate_100bps = (short) (bitrate / 100);
-        header.channels = (short) nchannels;
+        header.header_size = (short) (18 + (hrMode ? Short.BYTES : 0));
+        header.sRate_100hz = (short) (sRate_hz / 100);
+        header.bitRate_100bps = (short) (bitRate / 100);
+        header.channels = (short) nChannels;
         header.frame_10us = (short) (frame_us / 10);
-        header.nsamples_low = (short) (nsamples & 0xffff);
-        header.nsamples_high = (short) (nsamples >> 16);
+        header.nSamples_low = (short) (nSamples & 0xffff);
+        header.nSamples_high = (short) (nSamples >> 16);
 
         DataOutputStream dos = new DataOutputStream(fp);
         dos.writeShort(header.file_id);
         dos.writeShort(header.header_size);
-        dos.writeShort(header.srate_100hz);
-        dos.writeShort(header.bitrate_100bps);
+        dos.writeShort(header.sRate_100hz);
+        dos.writeShort(header.bitRate_100bps);
         dos.writeShort( header.frame_10us );
         dos.writeShort(header.channels );
-        dos.writeShort(header.epmode);
-        dos.writeShort(header.nsamples_low);
-        dos.writeShort(header.nsamples_high);
+        dos.writeShort(header.epMode);
+        dos.writeShort(header.nSamples_low);
+        dos.writeShort(header.nSamples_high);
 
-        if (hrmode)
-            dos.writeShort(hdr_hrmode);
+        if (hrMode)
+            dos.writeShort(hdr_hrMode);
     }
 
     /**

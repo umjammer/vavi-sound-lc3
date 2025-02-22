@@ -274,15 +274,15 @@ class Tns {
      * Quantization of RC coefficients
      *
      * @param rc       Reflection coefficients
-     * @param maxorder maximum order (4 or 8)
+     * @param maxOrder maximum order (4 or 8)
      * @param order    Return order of coefficients
      * @param rc_q     Return quantized coefficients
      */
-    private static void quantize_rc(float[] rc, int maxorder, int[] order, int orderP, int[] rc_q) {
+    private static void quantize_rc(float[] rc, int maxOrder, int[] order, int orderP, int[] rc_q) {
 
-        order[orderP] = maxorder;
+        order[orderP] = maxOrder;
 
-        for (int i = 0; i < maxorder; i++) {
+        for (int i = 0; i < maxOrder; i++) {
             float rc_m = Math.abs(rc[i]);
 
             rc_q[i] = 4 * (rc_m >= q_thr[4] ? 1 : 0);
@@ -295,7 +295,7 @@ class Tns {
             if (rc[i] < 0)
                 rc_q[i] = -rc_q[i];
 
-            order[orderP] = rc_q[i] != 0 ? maxorder : order[orderP] - 1;
+            order[orderP] = rc_q[i] != 0 ? maxOrder : order[orderP] - 1;
         }
     }
 

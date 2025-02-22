@@ -78,8 +78,8 @@ class Bits {
      */
     private static class AcSymbol {
 
-        short low;
-        short range;
+        final short low;
+        final short range;
 
         public AcSymbol(int low, int range) {
             this.low = (short) low;
@@ -89,7 +89,7 @@ class Bits {
 
     static class AcModel {
 
-        AcSymbol[] s; // = new AcSymbol[17];
+        final AcSymbol[] s; // = new AcSymbol[17];
 
         public AcModel(int[][] ii) {
             this.s = new AcSymbol[ii.length];
@@ -108,7 +108,7 @@ class Bits {
      */
     private static class Accu {
 
-        Buffer buffer;
+        final Buffer buffer;
 
         /**
          * @param buffer Bitstream buffer
@@ -126,11 +126,11 @@ class Bits {
          * Flush the bits accumulator
          */
         void flush() {
-            int nbytes = Math.min(n >>> 3, Math.max(buffer.pBw - this.buffer.pFw, 0));
+            int nBytes = Math.min(n >>> 3, Math.max(buffer.pBw - this.buffer.pFw, 0));
 
-            n -= 8 * nbytes;
+            n -= 8 * nBytes;
 
-            for (; nbytes != 0; v >>>= 8, nbytes--)
+            for (; nBytes != 0; v >>>= 8, nBytes--)
                 buffer.buffer[--buffer.pBw] = (byte) (v & 0xff);
 
             if (n >= 8)
@@ -254,7 +254,7 @@ class Bits {
      */
     private static class Ac {
 
-        Buffer buffer;
+        final Buffer buffer;
 
         /**
          * @param buffer Bitstream buffer
@@ -327,11 +327,11 @@ class Bits {
         /**
          * Arithmetic coder termination
          *
-         * end_val/nbits   End value and count of bits to terminate (1 to 8)
+         * end_val/nBits   End value and count of bits to terminate (1 to 8)
          */
         void terminate() {
-            int nbits = 25 - getRangeBits();
-            int mask = 0xff_ffff >>> nbits;
+            int nBits = 25 - getRangeBits();
+            int mask = 0xff_ffff >>> nBits;
             int val = low + mask;
             int high = low + range;
 
@@ -344,7 +344,7 @@ class Bits {
             if (over_val == over_high) {
 
                 if (val + mask >= high) {
-                    nbits++;
+                    nBits++;
                     mask >>>= 1;
                     val = ((low + mask) & 0xff_ffff) & ~mask;
                 }
@@ -354,23 +354,23 @@ class Bits {
 
             low = val;
 
-            for (; nbits > 8; nbits -= 8)
+            for (; nBits > 8; nBits -= 8)
                 shift();
             shift();
 
-            int end_val = cache >>> (8 - nbits);
+            int end_val = cache >>> (8 - nBits);
 
             if (carryCount != 0) {
                 put(cache);
                 for (; carryCount > 1; carryCount--)
                     put(0xff);
 
-                end_val = nbits < 8 ? 0 : 0xff;
+                end_val = nBits < 8 ? 0 : 0xff;
             }
 
             if (buffer.pFw < buffer.end) {
-                buffer.buffer[buffer.pFw] = (byte) (buffer.buffer[buffer.pFw] & (0xff >> nbits));
-                buffer.buffer[buffer.pFw] = (byte) (buffer.buffer[buffer.pFw] | (end_val << (8 - nbits)));
+                buffer.buffer[buffer.pFw] = (byte) (buffer.buffer[buffer.pFw] & (0xff >> nBits));
+                buffer.buffer[buffer.pFw] = (byte) (buffer.buffer[buffer.pFw] | (end_val << (8 - nBits)));
             }
         }
 
@@ -444,9 +444,9 @@ class Bits {
      */
     private static class Buffer {
 
-        byte[] buffer;
-        int start;
-        int end;
+        final byte[] buffer;
+        final int start;
+        final int end;
         int pFw;
         int pBw;
         Buffer(byte[] buffer, int offset, int len) {

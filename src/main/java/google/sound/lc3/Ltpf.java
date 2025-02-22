@@ -54,19 +54,19 @@ class Ltpf {
     static class Analysis {
         boolean active;
         int pitch;
-        float[] nc = new float[2];
+        final float[] nc = new float[2];
 
-        Hp50State hp50 = new Hp50State();
-        short[] x_12k8 = new short[384];
-        short[] x_6k4 = new short[178];
+        final Hp50State hp50 = new Hp50State();
+        final short[] x_12k8 = new short[384];
+        final short[] x_6k4 = new short[178];
         int tc;
     }
 
     static class Synthesis {
         boolean active;
         int pitch;
-        float[] c = new float[2*12];
-        float[] x = new float[12];
+        final float[] c = new float[2*12];
+        final float[] x = new float[12];
     }
 
     //
@@ -707,7 +707,7 @@ class Ltpf {
 
         resample_12k8.get(sr).accept(ltpf.hp50, x, xp, ltpf.x_12k8, x_12k8, n_12k8);
 
-        x_12k8 -= (short) (dt.ordinal() == _7M5.ordinal() ? 44 : 24);
+        x_12k8 -= (short) (dt == _7M5 ? 44 : 24);
 
         // Resampling to 6.4 KHz
 
@@ -909,7 +909,7 @@ class Ltpf {
         synthesize_template(xh, nh, lag, x0, x0p, x, xp, n, c, 12, fade);
     }
 
-    static Map<SRate, DecaConsumer<Integer, Integer, Integer, float[], Integer, float[], Integer, Integer, float[], Integer>> synthesize = Map.of(
+    static final Map<SRate, DecaConsumer<Integer, Integer, Integer, float[], Integer, float[], Integer, Integer, float[], Integer>> synthesize = Map.of(
             _8K, google.sound.lc3.Ltpf::synthesize_4,
             _16K, google.sound.lc3.Ltpf::synthesize_4,
             _24K, google.sound.lc3.Ltpf::synthesize_6,
