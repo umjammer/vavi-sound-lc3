@@ -44,7 +44,6 @@ import static google.sound.lc3.Lc3.lc3_pcm_format.LC3_PCM_FORMAT_S16;
 import static google.sound.lc3.Lc3.lc3_pcm_format.LC3_PCM_FORMAT_S24_3LE;
 import static google.sound.lc3.Lc3Bin.lc3bin_read_data;
 import static google.sound.lc3.Lc3Bin.lc3bin_read_header;
-import static google.sound.lc3.Lc3Test.volume;
 import static vavi.sound.SoundUtil.volume;
 
 
@@ -219,7 +218,7 @@ Debug.println(af);
         line.addLineListener(ev -> Debug.println(ev.getType()));
         line.start();
 
-        volume(line, volume);
+        volume(line, Double.parseDouble(System.getProperty("vavi.test.volume", "0.2")));
 
         final String dash_line = "========================================";
 
