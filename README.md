@@ -40,5 +40,6 @@ system properties (for google's pure java version only)
 
  * research difference between `NativeLong` and `PointerByReference` at method argument
    * this time `NativeLong` works well and `PointerByReference` does not
- * ~~pure java version from [google's](https://github.com/google/liblc3)~~ little bit noisy
+ * ~~pure java version from [google's](https://github.com/google/liblc3)~~ ~~little bit noisy~~ ... thanks claude sonnet 4.5
    * make it more oop 
+   * spi
