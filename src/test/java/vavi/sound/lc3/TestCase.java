@@ -48,16 +48,18 @@ class TestCase {
     @Property
     String lc3file = "src/test/resources/test.lc3";
 
+    @Property
+    double volume = 0.2;
+
     @BeforeEach
     void setup() throws Exception {
         if (localPropertiesExists()) {
             PropsEntity.Util.bind(this);
         }
+Debug.println("volume: " + volume);
     }
 
     static final long time = System.getProperty("vavi.test", "").equals("ide") ? 1000 * 1000 : 10 * 1000;
-
-    static final double volume = Double.parseDouble(System.getProperty("vavi.test.volume",  "0.2"));
 
     @Test
     @DisplayName("list available lines")

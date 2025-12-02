@@ -14,6 +14,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
+
+import vavi.util.Debug;
 import vavi.util.properties.annotation.Property;
 import vavi.util.properties.annotation.PropsEntity;
 
@@ -37,14 +39,18 @@ class Lc3Test {
     @Property
     String lc3file = "src/test/resources/test.lc3";
 
+    @Property
+    double volume = 0.2;
+
     @BeforeEach
     void setup() throws Exception {
         if (localPropertiesExists()) {
             PropsEntity.Util.bind(this);
         }
-    }
 
-    static double volume = Double.parseDouble(System.getProperty("vavi.test.volume",  "0.2"));
+        System.setProperty("vavi.test.volume", String.valueOf(volume));
+Debug.println("volume: " + volume);
+    }
 
     @Test
     @DisplayName("table loading test")
