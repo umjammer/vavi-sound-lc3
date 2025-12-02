@@ -6,10 +6,10 @@ package vavi.sound.lc3;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.System.Logger;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.ShortBuffer;
-import java.util.logging.Level;
 
 import com.sun.jna.Memory;
 import com.sun.jna.Native;
@@ -19,8 +19,10 @@ import com.sun.jna.ptr.PointerByReference;
 import vavi.io.LittleEndianDataInputStream;
 import vavi.sound.lc3.jna.Lc3Library.LC3PLUS_Error;
 import vavi.sound.lc3.jna.Lc3Library.LC3PLUS_PlcMode;
-import vavi.util.Debug;
 
+import static java.lang.System.Logger.Level.DEBUG;
+import static java.lang.System.Logger.Level.TRACE;
+import static java.lang.System.getLogger;
 import static vavi.sound.lc3.jna.Lc3Library.ERROR_MESSAGES;
 import static vavi.sound.lc3.jna.Lc3Library.INSTANCE;
 import static vavi.sound.lc3.jna.Lc3Library.LC3PLUS_MAX_BYTES;
@@ -34,16 +36,18 @@ import static vavi.sound.lc3.jna.Lc3Library.LC3PLUS_MAX_BYTES;
  */
 public class Lc3Plus implements AutoCloseable {
 
+    private static final Logger logger = getLogger(Lc3Plus.class.getName());
+
     /** the decoder structure */
-    private PointerByReference decoder = new PointerByReference();
+    private final PointerByReference decoder = new PointerByReference();
 
     // input data
 
     /** MUST be 8000 Hz, 16000 Hz, 24000 Hz, 32000 Hz, 44100 Hz, 48000 Hz or 96000 Hz */
     private int sampleRate = 48000;
-    private int bitrate;
+    private final int bitrate;
     private int signalLength;
-    private int channels;
+    private final int channels;
     /** MUST be 10 ms, 5 ms or 2.5 ms */
     private float frameMs = 10;
     private boolean epMode;
@@ -57,10 +61,10 @@ public class Lc3Plus implements AutoCloseable {
 
     // runtime
 
-    private LittleEndianDataInputStream ledis;
+    private final LittleEndianDataInputStream ledis;
 
     /** read buffer */
-    private Memory input;
+    private final Memory input;
     /** scratch */
     private int scratchSize;
     /** scratch */
@@ -113,14 +117,14 @@ public class Lc3Plus implements AutoCloseable {
                 sampleRate = i * 100;
                 bitrate = ledis.readUnsignedShort() * 100;
                 channels = ledis.readUnsignedShort();
-Debug.println(Level.FINE, "sampleRate: " + sampleRate);
-Debug.println(Level.FINE, "bitrate: " + bitrate);
-Debug.println(Level.FINE, "channels: " + channels);
+logger.log(DEBUG, "sampleRate: " + sampleRate);
+logger.log(DEBUG, "bitrate: " + bitrate);
+logger.log(DEBUG, "channels: " + channels);
                 in.reset();
                 ledis.skipBytes(6);
             } else {
                 int v = ledis.readUnsignedShort();
-Debug.println(Level.FINE, "v: " + v);
+logger.log(DEBUG, "v: " + v);
                 assert v >= 18;
                 sampleRate = ledis.readUnsignedShort() * 100;
                 bitrate = ledis.readUnsignedShort() * 100;
@@ -129,12 +133,12 @@ Debug.println(Level.FINE, "v: " + v);
                 epMode = ledis.readUnsignedShort() != 0;
                 signalLength = ledis.readInt();
                 hrMode = v > 18 ? ledis.readUnsignedShort() : 0;
-Debug.println(Level.FINE, "sampleRate: " + sampleRate);
-Debug.println(Level.FINE, "bitrate: " + bitrate);
-Debug.println(Level.FINE, "channels: " + channels);
-Debug.println(Level.FINE, "frameMs: " + frameMs);
-Debug.println(Level.FINE, "epMode: " + epMode);
-Debug.println(Level.FINE, "signalLength: " + signalLength);
+logger.log(DEBUG, "sampleRate: " + sampleRate);
+logger.log(DEBUG, "bitrate: " + bitrate);
+logger.log(DEBUG, "channels: " + channels);
+logger.log(DEBUG, "frameMs: " + frameMs);
+logger.log(DEBUG, "epMode: " + epMode);
+logger.log(DEBUG, "signalLength: " + signalLength);
                 in.reset();
                 ledis.skipBytes(v);
             }
@@ -154,10 +158,10 @@ Debug.println(Level.FINE, "signalLength: " + signalLength);
     private void init() throws IOException {
         int size = INSTANCE.lc3plus_dec_get_size(sampleRate, channels, plcMode);
         Memory m = new Memory(size);
-Debug.println(Level.FINER, m.size() + ", " + m);
+logger.log(TRACE, m.size() + ", " + m);
         decoder.setPointer(m);
 
-Debug.println(Level.FINE, "hrMode: " + hrMode);
+logger.log(DEBUG, "hrMode: " + hrMode);
         int r = INSTANCE.lc3plus_dec_init(decoder, sampleRate, channels, plcMode, hrMode);
         if (r != LC3PLUS_Error.LC3PLUS_OK) {
             throw new IOException("lc3plus_dec_init: " + ERROR_MESSAGES[r]);
@@ -174,13 +178,13 @@ Debug.println(Level.FINE, "hrMode: " + hrMode);
         }
 
         samples = INSTANCE.lc3plus_dec_get_output_samples(decoder);
-Debug.println(Level.FINE, "samples: " + samples);
+logger.log(DEBUG, "samples: " + samples);
 
         scratchSize = INSTANCE.lc3plus_dec_get_scratch_size(decoder);
-Debug.println(Level.FINE, "scratchSize: " + scratchSize);
+logger.log(DEBUG, "scratchSize: " + scratchSize);
         scratch = new Memory(scratchSize);
 
-Debug.println(Level.FINER, "Native.POINTER_SIZE: " + Native.POINTER_SIZE);
+logger.log(TRACE, "Native.POINTER_SIZE: " + Native.POINTER_SIZE);
         output16s = new Memory((long) channels * Native.POINTER_SIZE);
         output16ch = new Memory[channels];
         for (int i = 0; i < channels; i++) {
@@ -192,7 +196,7 @@ Debug.println(Level.FINER, "Native.POINTER_SIZE: " + Native.POINTER_SIZE);
     /** decode */
     public byte[] decode(int inSize) throws IOException {
 
-Debug.println(Level.FINER, "decode: " + inSize + ", " + bfiExt);
+logger.log(TRACE, "decode: " + inSize + ", " + bfiExt);
         int r = INSTANCE.lc3plus_dec16(decoder, input, inSize, new NativeLong(Pointer.nativeValue(output16s)), scratch, bfiExt);
         if (r != LC3PLUS_Error.LC3PLUS_OK) {
             throw new IOException("lc3plus_dec16: " + ERROR_MESSAGES[r]);
@@ -245,7 +249,7 @@ Debug.println(Level.FINER, "decode: " + inSize + ", " + bfiExt);
             for (int j = 0; j < 8; j++) {
                 int currentBit = ledis.readShort();
                 if (currentBit == G192_ONE) {
-                    byte_ |= 1 << j;
+                    byte_ = (byte) (byte_ | 1 << j);
                 }
             }
             input.setByte(i, byte_);

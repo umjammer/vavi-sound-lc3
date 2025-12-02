@@ -28,9 +28,7 @@ public class Lc3FileFormatType extends AudioFileFormat.Type {
      * @param name the name of the LC3 File Format.
      * @param extension the file extension for this LC3 File Format.
      */
-    public Lc3FileFormatType(String name, String extension) {
+    private Lc3FileFormatType(String name, String extension) {
         super(name, extension);
     }
 }
-
-/* */

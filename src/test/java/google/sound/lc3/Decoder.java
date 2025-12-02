@@ -1,0 +1,286 @@
+/*
+ *  Copyright 2022 Google LLC
+ *
+ *  Licensed under the Apache License, Version 2.0 (the "License");
+ *  you may not use this file except in compliance with the License.
+ *  You may obtain a copy of the License at:
+ *
+ *  http://www.apache.org/licenses/LICENSE-2.0
+ *
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ */
+
+package google.sound.lc3;
+
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Arrays;
+import javax.sound.sampled.AudioFormat;
+import javax.sound.sampled.AudioFormat.Encoding;
+import javax.sound.sampled.AudioInputStream;
+import javax.sound.sampled.AudioSystem;
+import javax.sound.sampled.DataLine;
+import javax.sound.sampled.SourceDataLine;
+
+import google.sound.lc3.Lc3.lc3_pcm_format;
+import vavi.sound.sampled.lc3.Lc3Encoding;
+import vavi.util.Debug;
+
+import static google.sound.lc3.Lc3.LC3_CHECK_DT_US;
+import static google.sound.lc3.Lc3.LC3_HR_CHECK_SR_HZ;
+import static google.sound.lc3.Lc3.LC3_HR_MAX_FRAME_BYTES;
+import static google.sound.lc3.Lc3.LC3_HR_MAX_FRAME_SAMPLES;
+import static google.sound.lc3.Lc3.lc3_decode;
+import static google.sound.lc3.Lc3.lc3_hr_delay_samples;
+import static google.sound.lc3.Lc3.lc3_hr_frame_samples;
+import static google.sound.lc3.Lc3.lc3_hr_setup_decoder;
+import static google.sound.lc3.Lc3.lc3_pcm_format.LC3_PCM_FORMAT_S16;
+import static google.sound.lc3.Lc3.lc3_pcm_format.LC3_PCM_FORMAT_S24_3LE;
+import static google.sound.lc3.Lc3Bin.lc3bin_read_data;
+import static google.sound.lc3.Lc3Bin.lc3bin_read_header;
+import static vavi.sound.SoundUtil.volume;
+
+
+class Decoder {
+
+    static final int MAX_CHANNELS = 2;
+
+    //
+    // Parameters
+    //
+
+    static class Parameters {
+        String fName_in;
+        String fName_out;
+        int bitDepth;
+        int sRate_hz;
+    }
+
+    static Parameters parse_args(String[] argv) {
+        final String usage = """
+                        Usage: %s [wav_file] [out_file]
+
+                        wav_file\tInput wave file, stdin if omitted
+                        out_file\tOutput bitstream file, stdout if omitted
+
+                        Options:
+                        \t-h\tDisplay help
+                        \t-b\tOutput bitDepth, 16 bits (default) or 24 bits
+                        \t-r\tOutput sampleRate, default is LC3 stream sampleRate
+
+                        """;
+
+        Parameters p = new Parameters();
+        p.bitDepth = 16;
+
+        for (int iarg = 0; iarg < argv.length; ) {
+            String arg = argv[iarg++];
+
+            if (arg.charAt(0) == '-') {
+                if (arg.charAt(2) != '\0')
+                    throw new IllegalArgumentException("Option " + arg);
+
+                char opt = arg.charAt(1);
+                String optarg = switch (opt) {
+                    case 'b', 'r' -> {
+                        if (iarg >= argv.length)
+                            throw new IllegalArgumentException("Argument " + arg);
+                        yield argv[iarg++];
+                    }
+                    default -> null;
+                };
+
+                switch (opt) {
+                    case 'h':
+                        System.err.printf(usage, Decoder.class.getName());
+                        System.exit(0);
+                    case 'b':
+                        p.bitDepth = Integer.parseInt(optarg);
+                        break;
+                    case 'r':
+                        p.sRate_hz = Integer.parseInt(optarg);
+                        break;
+                    default:
+                        throw new IllegalArgumentException("Option " + arg);
+                }
+
+            } else {
+
+                if (p.fName_in == null)
+                    p.fName_in = arg;
+                else if (p.fName_out == null)
+                    p.fName_out = arg;
+                else
+                    throw new IllegalArgumentException("Argument " + arg);
+            }
+        }
+
+        return p;
+    }
+
+    /**
+     * Return time in (us) from unspecified point in the past
+     */
+    static long clock_us() {
+        long ts;
+
+        ts = System.currentTimeMillis();
+
+        return ts;
+    }
+
+    /**
+     * Entry point
+     */
+    public static void main(String[] argv) throws Exception {
+        // Read parameters
+
+        Parameters p = parse_args(argv);
+        InputStream fp_in = System.in;
+        OutputStream fp_out = System.out;
+
+Debug.println("p.fName_in: " + p.fName_in);
+        if (p.fName_in != null)
+            fp_in = Files.newInputStream(Path.of(p.fName_in));
+
+        if (p.fName_out != null)
+            fp_out = Files.newOutputStream(Path.of(p.fName_out));
+
+        if (p.bitDepth != 0 && p.bitDepth != 16 && p.bitDepth != 24)
+            throw new IllegalArgumentException(String.format("BitDepth %d", p.bitDepth));
+
+        // Check parameters
+
+        int[] frame_us = new int[1], sRate_hz = new int[1], nChannels = new int[1], nSamples = new int[1];
+        boolean[] hrMode = new boolean[1];
+
+Debug.println("fp_in: " + fp_in);
+        if (lc3bin_read_header(fp_in, frame_us, sRate_hz, hrMode, nChannels, nSamples) < 0)
+            throw new IllegalArgumentException("LC3 binary input file");
+
+        if (nChannels[0] < 1 || nChannels[0] > MAX_CHANNELS)
+            throw new IllegalArgumentException(String.format("Number of channels %d", nChannels[0]));
+
+        if (!LC3_CHECK_DT_US(frame_us[0]))
+            throw new IllegalArgumentException("Frame duration");
+
+        if (!LC3_HR_CHECK_SR_HZ(hrMode[0], sRate_hz[0]))
+            throw new IllegalArgumentException(String.format("SampleRate %d Hz", sRate_hz[0]));
+
+        if (p.sRate_hz != 0 && (!LC3_HR_CHECK_SR_HZ(hrMode[0], p.sRate_hz) || p.sRate_hz < sRate_hz[0]))
+            throw new IllegalArgumentException(String.format("Output sampleRate %d Hz", p.sRate_hz));
+
+        int pcm_sBits = p.bitDepth;
+        int pcm_sBytes = pcm_sBits / 8;
+
+        int pcm_sRate_hz = p.sRate_hz == 0 ? sRate_hz[0] : p.sRate_hz;
+        int pcm_samples = p.sRate_hz == 0 ? nSamples[0] : (nSamples[0] * pcm_sRate_hz) / sRate_hz[0];
+
+//        wave_write_header(fp_out,
+//                pcm_sBits, pcm_sBytes, pcm_sRate_hz, nChannels, pcm_samples);
+        AudioFormat af = new AudioFormat(Encoding.PCM_SIGNED,
+                pcm_sRate_hz, pcm_sBits, nChannels[0], pcm_sBytes * nChannels[0], pcm_sRate_hz, false);
+Debug.println(af);
+
+        // Setup decoding
+
+        byte[] in = new byte[2 * LC3_HR_MAX_FRAME_BYTES];
+        byte[] pcm = new byte[2 * LC3_HR_MAX_FRAME_SAMPLES * Short.BYTES];
+        Lc3.Decoder[] dec = new Lc3.Decoder[2];
+
+        int frame_samples = lc3_hr_frame_samples(hrMode[0], frame_us[0], pcm_sRate_hz);
+        int encode_samples = pcm_samples + lc3_hr_delay_samples(hrMode[0], frame_us[0], pcm_sRate_hz);
+        lc3_pcm_format pcm_fmt = pcm_sBits == 24 ? LC3_PCM_FORMAT_S24_3LE : LC3_PCM_FORMAT_S16;
+
+        for (int ich = 0; ich < nChannels[0]; ich++) {
+            dec[ich] = lc3_hr_setup_decoder(
+                    hrMode[0], frame_us[0], sRate_hz[0], p.sRate_hz
+                    /* ,malloc(lc3_hr_decoder_size(hrMode[0], frame_us[0], pcm_sRate_hz)) */);
+
+            if (dec[ich] == null)
+                throw new IllegalArgumentException("Decoder initialization failed");
+        }
+
+        // Decoding loop
+
+        AudioFormat lc3 = new AudioFormat(Lc3Encoding.LC3, pcm_sRate_hz, pcm_sBits, nChannels[0], 2, pcm_sRate_hz, false);
+        AudioInputStream ais = new AudioInputStream(fp_in, lc3, AudioSystem.NOT_SPECIFIED);
+
+        DataLine.Info info = new DataLine.Info(SourceDataLine.class, af);
+        SourceDataLine line = (SourceDataLine) AudioSystem.getLine(info);
+        line.open(af);
+        line.addLineListener(ev -> Debug.println(ev.getType()));
+        line.start();
+
+        volume(line, Double.parseDouble(System.getProperty("vavi.test.volume", "0.2")));
+
+        final String dash_line = "========================================";
+
+        int nsec = 0;
+        int nerr = 0;
+        long t0 = clock_us();
+
+//Debug.printf("frame_samples: %d, encode_samples: %d%n", frame_samples, encode_samples);
+        for (int i = 0; i * frame_samples < encode_samples; i++) {
+
+            int in_ptr = 0; // in
+            int block_bytes = lc3bin_read_data(fp_in, nChannels[0], in, in_ptr);
+//System.err.printf("block_bytes: %d%n", block_bytes);
+
+            if (Math.floor(i * frame_us[0] * 1e-6) > nsec) {
+
+                float progress = Math.min((float) i * frame_samples / pcm_samples, 1);
+
+                System.err.printf("%02d:%02d [%-40s]\r",
+                        nsec / 60, nsec % 60,
+                        dash_line + (int) Math.floor((1 - progress) * 40));
+
+                nsec = (int) Math.rint(i * frame_us[0] * 1e-6);
+            }
+
+            if (block_bytes <= 0)
+                Arrays.fill(pcm, 0, nChannels[0] * frame_samples * pcm_sBytes, (byte) 0);
+            else {
+                for (int ich = 0; ich < nChannels[0]; ich++) {
+                    int frame_bytes = block_bytes / nChannels[0] + (ich < block_bytes % nChannels[0] ? 1 : 0);
+
+                    boolean res = lc3_decode(
+                            dec[ich], in, in_ptr, frame_bytes, pcm_fmt, pcm, ich * pcm_sBytes, nChannels[0]);
+
+                    nerr += res ? 1 : 0;
+                    in_ptr += frame_bytes;
+//System.err.printf("D: in_ptr: %d, frame_bytes: %d%n", in_ptr, frame_bytes);
+                }
+            }
+
+            int pcm_offset = i > 0 ? 0 : encode_samples - pcm_samples;
+            int pcm_nWrite = Math.min(frame_samples - pcm_offset, encode_samples - i * frame_samples);
+
+            line_write_pcm(line, pcm_sBytes, pcm, nChannels[0], pcm_offset, pcm_nWrite);
+//            wave_write_pcm(fp_out, pcm_sBytes, pcm, nChannels, pcm_offset, pcm_nWrite);
+        }
+
+        line.drain();
+        line.stop();
+        line.close();
+
+        int t = (int) ((clock_us() - t0) / 1000);
+        nsec = nSamples[0] / sRate_hz[0];
+
+        System.err.printf("%02d:%02d Decoded in %d.%03d seconds %20s\n",
+                nsec / 60, nsec % 60, t / 1000, t % 1000, "");
+
+        if (nerr != 0)
+            System.err.printf("Warning: Decoding of %d frames failed!\n", nerr);
+    }
+
+    static void line_write_pcm(SourceDataLine line, int sampleSize, byte[] pcm, int nch, int off, int count) {
+        line.write(pcm, nch * off * sampleSize, nch * sampleSize * count);
+    }
+}

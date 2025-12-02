@@ -70,7 +70,7 @@ public class Lc3FormatConversionProvider extends FormatConversionProvider {
                         return sourceStream;
                     } else if (sourceFormat.getEncoding() instanceof Lc3Encoding && targetFormat.getEncoding().equals(AudioFormat.Encoding.PCM_SIGNED)) {
                         Lc3Plus lc3Plus = (Lc3Plus) sourceFormat.getProperty("lc3Plus");
-                        return new Lc32PcmAudioInputStream(sourceStream, targetFormat, AudioSystem.NOT_SPECIFIED, lc3Plus);
+                        return new Lc3ToPcmAudioInputStream(sourceStream, targetFormat, AudioSystem.NOT_SPECIFIED, lc3Plus);
                     } else if (sourceFormat.getEncoding().equals(AudioFormat.Encoding.PCM_SIGNED) && targetFormat.getEncoding() instanceof Lc3Encoding) {
                         throw new IllegalArgumentException("unable to convert " + sourceFormat + " to " + targetFormat);
                     } else {
@@ -99,7 +99,7 @@ public class Lc3FormatConversionProvider extends FormatConversionProvider {
                     } else if (sourceFormat.getEncoding() instanceof Lc3Encoding &&
                                targetFormat.getEncoding().equals(AudioFormat.Encoding.PCM_SIGNED)) {
                         Lc3Plus lc3Plus = (Lc3Plus) sourceFormat.getProperty("lc3Plus");
-                        return new Lc32PcmAudioInputStream(sourceStream, targetFormat, AudioSystem.NOT_SPECIFIED, lc3Plus);
+                        return new Lc3ToPcmAudioInputStream(sourceStream, targetFormat, AudioSystem.NOT_SPECIFIED, lc3Plus);
                     } else if (sourceFormat.getEncoding().equals(AudioFormat.Encoding.PCM_SIGNED) && targetFormat.getEncoding() instanceof Lc3Encoding) {
                         throw new IllegalArgumentException("unable to convert " + sourceFormat + " to " + targetFormat);
                     } else {
@@ -116,5 +116,3 @@ public class Lc3FormatConversionProvider extends FormatConversionProvider {
         }
     }
 }
-
-/* */
