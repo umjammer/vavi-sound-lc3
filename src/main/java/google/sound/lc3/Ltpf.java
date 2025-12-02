@@ -44,6 +44,8 @@ import static google.sound.lc3.Tables.lc3_ns_4m;
 
 /**
  * Long Term Postfilter
+ *
+ * @see "https://claude.ai/chat/bda73849-7cac-4d0b-8d4a-dadf35452818"
  */
 class Ltpf {
 
@@ -408,11 +410,13 @@ class Ltpf {
      * @param y [0..n-1] Output processed samples
      * @param n processed samples
      */
-    static void resample_6k4(short[] x, int yp, short[] y, int xp, int n) {
+    static void resample_6k4(short[] x, int xp, short[] y, int yp, int n) {
         short[] h = {18477, 15424, 8105};
 
-        for (xp--; yp < n; xp += 2)
-            y[yp++] = (short) ((x[0] * h[0] + (x[xp + -1] + x[1]) * h[1] + (x[xp - 2] + x[xp + 2]) * h[2]) >> 16);
+        xp--; // Move back one position for the filter
+        for (int i = 0; i < n; i++, xp += 2) {
+            y[yp++] = (short) ((x[xp] * h[0] + (x[xp - 1] + x[xp + 1]) * h[1] + (x[xp - 2] + x[xp + 2]) * h[2]) >> 16);
+        }
     }
 
     /**
@@ -841,7 +845,7 @@ class Ltpf {
             float[] x0, int x0p, float[] x, int xp, int n,
             float[] c, int w, int fade) {
 
-        float g = (float) (fade <= 0 ? 1 : 0);
+        float g = (fade <= 0) ? 1.0f : 0.0f;
         float g_incr = (float) ((fade > 0 ? 1 : 0) - (fade < 0 ? 1 : 0)) / n;
         float[] u = new float[MAX_FILTER_WIDTH];
 
@@ -849,8 +853,13 @@ class Ltpf {
 
         lag += (w >> 1);
 
-        int y = -xh < lag ? nh - lag : -lag; // x
-        int y_end = xh + nh - 1;
+        // Calculate initial y position in the ring buffer
+        int y = xp - lag;
+        if (y < xh) {
+            y += nh;
+        }
+
+        int y_end = xh + nh;
 
         for (int j = 0; j < w - 1; j++) {
 
@@ -858,7 +867,12 @@ class Ltpf {
 
             float yi = x[y];
             float xi = x0[x0p++];
-            y = y < y_end ? y + 1 : xh;
+
+            // Advance y with wrap-around
+            y++;
+            if (y >= y_end) {
+                y = xh;
+            }
 
             for (int k = 0; k <= j; k++)
                 u[j - k] -= yi * c[k];
@@ -871,12 +885,17 @@ class Ltpf {
 
         // Process by filter length
 
-        for (int i = 0; i < n; i += w)
+        for (int i = 0; i < n; i += w) {
             for (int j = 0; j < w; j++, g += g_incr) {
 
                 float yi = x[y];
                 float xi = x[xp];
-                y = y < y_end ? y + 1 : xh;
+
+                // Advance y with wrap-around
+                y++;
+                if (y >= y_end) {
+                    y = xh;
+                }
 
                 for (int k = 0; k < w; k++)
                     u[(j + (w - 1) - k) % w] -= yi * c[k];
@@ -887,6 +906,7 @@ class Ltpf {
                 x[xp++] = xi - g * u[j];
                 u[j] = 0;
             }
+        }
     }
 
     /*
@@ -971,10 +991,10 @@ class Ltpf {
         float[][] x0 = new float[2][MAX_FILTER_WIDTH];
 
         System.arraycopy(ltpf.x, 0, x0[0], 0, w - 1);
-        System.arraycopy(x, +ns - (w - 1), ltpf.x, 0, w - 1);
+        System.arraycopy(x, xp + ns - (w - 1), ltpf.x, 0, w - 1);
 
         if (active)
-            System.arraycopy(x, nt - (w - 1), x0[1], 0, w - 1);
+            System.arraycopy(x, xp + nt - (w - 1), x0[1], 0, w - 1);
 
         if (!ltpf.active && active)
             synthesize.get(sr).accept(xh, nh, pitch / 4, x0[0], 0, x, xp, nt, c, 1);
@@ -984,8 +1004,15 @@ class Ltpf {
             synthesize.get(sr).accept(xh, nh, pitch / 4, x0[0], 0, x, xp, nt, c, 0);
         else if (ltpf.active && active) {
             synthesize.get(sr).accept(xh, nh, ltpf.pitch / 4, x0[0], 0, x, xp, nt, ltpf.c, -1);
+
+            // Calculate the correct source offset for x0[1]
+            int x0_1_src = xp - (w - 1);
+            if (x0_1_src < xh) {
+                x0_1_src += nh;
+            }
+
             synthesize.get(sr).accept(xh, nh, pitch / 4,
-                    x, (xp <= xh ? xp + nh : xp) - (w - 1), x, xp, nt, c, 1);
+                    x, x0_1_src, x, xp, nt, c, 1);
         }
 
         // Remainder
