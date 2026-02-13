@@ -22,14 +22,20 @@ import javax.sound.sampled.UnsupportedAudioFileException;
 import javax.sound.sampled.spi.AudioFileReader;
 
 import vavi.sound.lc3.Lc3Plus;
+import vavi.sound.sampled.lc3.GoogleLc3.Lc3Header;
 
 import static java.lang.System.getLogger;
+import static vavi.sound.sampled.lc3.Lc3FormatConversionProvider.google;
 
 
 /**
  * Provider for LC3 audio file reading services. This implementation can parse
  * the format information from LC3 audio file, and can produce audio input
  * streams from files of this type.
+ * <p>
+ * system property
+ * {@code vavi.sound.sampled.lc3.google} ... use google (pure java) engine or not. default {@code false}
+ * </p>
  *
  * @author <a href="mailto:umjammer@gmail.com">Naohide Sano</a> (nsano)
  * @version 0.00 2023/05/31 umjammer initial version <br>
@@ -68,9 +74,40 @@ public class Lc3AudioFileReader extends AudioFileReader {
      *                valid audio file data recognized by the system.
      * @exception IOException if an I/O exception occurs.
      */
-    protected AudioFileFormat getAudioFileFormat(InputStream bitStream, int mediaLength) throws UnsupportedAudioFileException, IOException {
+    protected static AudioFileFormat getAudioFileFormat(InputStream bitStream, int mediaLength) throws UnsupportedAudioFileException, IOException {
 //logger.log(Level.DEBUG, "here: " + bitStream.markSupported());
 logger.log(Level.DEBUG, "enter available: " + bitStream.available());
+        if (google)
+            return getAudioFileFormat_Google(bitStream, mediaLength);
+        else
+            return getAudioFileFormat_Plus(bitStream, mediaLength);
+    }
+
+    /** google (pure java) */
+    protected static AudioFileFormat getAudioFileFormat_Google(InputStream bitStream, int mediaLength) throws UnsupportedAudioFileException, IOException {
+        Lc3Header header;
+        try {
+            bitStream.mark(20);
+            header = GoogleLc3.lc3bin_read_header(bitStream);
+        } catch (IllegalArgumentException e) {
+logger.log(Level.TRACE, e.getMessage(), e);
+            throw (UnsupportedAudioFileException) new UnsupportedAudioFileException(e.getMessage()).initCause(e);
+        } finally {
+            try {
+                bitStream.reset();
+            } catch (IOException e) {
+                logger.log(Level.INFO, e.getMessage());
+            }
+logger.log(Level.DEBUG, "exit available: " + bitStream.available());
+        }
+        AudioFormat format = new AudioFormat(Lc3Encoding.LC3, header.sRate_hz, AudioSystem.NOT_SPECIFIED, header.nChannels, AudioSystem.NOT_SPECIFIED, AudioSystem.NOT_SPECIFIED, true, new HashMap<>() {{
+            put("googleLc3", header);
+        }});
+        return new AudioFileFormat(Lc3FileFormatType.LC3, format, AudioSystem.NOT_SPECIFIED);
+    }
+
+    /** lc3plus */
+    protected static AudioFileFormat getAudioFileFormat_Plus(InputStream bitStream, int mediaLength) throws UnsupportedAudioFileException, IOException {
         Lc3Plus lc3Plus;
         try {
             lc3Plus = new Lc3Plus(bitStream);
