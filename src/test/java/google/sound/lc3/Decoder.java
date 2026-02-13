@@ -153,7 +153,7 @@ Debug.println("p.fName_in: " + p.fName_in);
             fp_out = Files.newOutputStream(Path.of(p.fName_out));
 
         if (p.bitDepth != 0 && p.bitDepth != 16 && p.bitDepth != 24)
-            throw new IllegalArgumentException(String.format("BitDepth %d", p.bitDepth));
+            throw new IllegalArgumentException("BitDepth " + p.bitDepth);
 
         // Check parameters
 
@@ -165,16 +165,16 @@ Debug.println("fp_in: " + fp_in);
             throw new IllegalArgumentException("LC3 binary input file");
 
         if (nChannels[0] < 1 || nChannels[0] > MAX_CHANNELS)
-            throw new IllegalArgumentException(String.format("Number of channels %d", nChannels[0]));
+            throw new IllegalArgumentException("Number of channels " + nChannels[0]);
 
         if (!LC3_CHECK_DT_US(frame_us[0]))
             throw new IllegalArgumentException("Frame duration");
 
         if (!LC3_HR_CHECK_SR_HZ(hrMode[0], sRate_hz[0]))
-            throw new IllegalArgumentException(String.format("SampleRate %d Hz", sRate_hz[0]));
+            throw new IllegalArgumentException("SampleRate %d Hz".formatted(sRate_hz[0]));
 
         if (p.sRate_hz != 0 && (!LC3_HR_CHECK_SR_HZ(hrMode[0], p.sRate_hz) || p.sRate_hz < sRate_hz[0]))
-            throw new IllegalArgumentException(String.format("Output sampleRate %d Hz", p.sRate_hz));
+            throw new IllegalArgumentException("Output sampleRate %d Hz".formatted(p.sRate_hz));
 
         int pcm_sBits = p.bitDepth;
         int pcm_sBytes = pcm_sBits / 8;

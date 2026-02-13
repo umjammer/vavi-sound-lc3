@@ -208,7 +208,7 @@ import static java.lang.System.getLogger;
  *
  * @author Antoine SOULIER, Tempow / Google LLC
  */
-class Lc3 {
+public class Lc3 {
 
     private static final Logger logger = getLogger(Lc3.class.getName());
 
@@ -306,18 +306,18 @@ class Lc3 {
 
     static final int LC3_MIN_FRAME_BYTES = 20;
     static final int LC3_MAX_FRAME_BYTES = 400;
-    static final int LC3_HR_MAX_FRAME_BYTES = 625;
+    public static final int LC3_HR_MAX_FRAME_BYTES = 625;
 
     private static final int LC3_MIN_FRAME_SAMPLES = 8000;
     private static final int LC3_MAX_FRAME_SAMPLES = 48000;
-    static final int LC3_HR_MAX_FRAME_SAMPLES = 96000;
+    public static final int LC3_HR_MAX_FRAME_SAMPLES = 96000;
 
     /*
      * Parameters check
      */
 
     /** True when frame duration in us is suitable */
-    static boolean LC3_CHECK_DT_US(int us) {
+    public static boolean LC3_CHECK_DT_US(int us) {
         return us == 2500 || us == 5000 || us == 7500 || us == 10000;
     }
 
@@ -330,7 +330,7 @@ class Lc3 {
      * True when sample rate in Hz is suitable, according to the
      * selection of the high-resolution mode `hrMode`.
      */
-    static boolean LC3_HR_CHECK_SR_HZ(boolean hrMode, int sr) {
+    public static boolean LC3_HR_CHECK_SR_HZ(boolean hrMode, int sr) {
         return hrMode ? sr == 48000 || sr == 96000 : LC3_CHECK_SR_HZ(sr);
     }
 
@@ -342,7 +342,7 @@ class Lc3 {
      * S24_3LE  Signed 24 bits packed in 3 bytes little endian
      * FLOAT    Floating point 32 bits (float type), in range -1 to 1
      */
-    enum lc3_pcm_format {
+    public enum lc3_pcm_format {
         LC3_PCM_FORMAT_S16 {
             /**
              * Input PCM Samples from signed 16 bits
@@ -618,7 +618,7 @@ class Lc3 {
     /**
      * Decoder state and memory
      */
-    static class Decoder {
+    public static class Decoder {
 
         Duration dt;
         SRate sr, sr_pcm;
@@ -692,7 +692,7 @@ class Lc3 {
     /**
      * Return the number of PCM samples in a frame
      */
-    static int lc3_hr_frame_samples(boolean hrMode, int dt_us, int sr_hz) {
+    public static int lc3_hr_frame_samples(boolean hrMode, int dt_us, int sr_hz) {
         Duration dt = resolve_dt(dt_us, hrMode);
         SRate sr = resolve_srate(sr_hz, hrMode);
 
@@ -755,7 +755,7 @@ class Lc3 {
     /**
      * Return algorithmic delay, as a number of samples
      */
-    static int lc3_hr_delay_samples(boolean hrMode, int dt_us, int sr_hz) {
+    public static int lc3_hr_delay_samples(boolean hrMode, int dt_us, int sr_hz) {
         Duration dt = resolve_dt(dt_us, hrMode);
         SRate sr = resolve_srate(sr_hz, hrMode);
 
@@ -1065,7 +1065,7 @@ class Lc3 {
     /**
      * Setup decoder
      */
-    static Decoder lc3_hr_setup_decoder(boolean hrMode, int dt_us, int sr_hz, int sr_pcm_hz) {
+    public static Decoder lc3_hr_setup_decoder(boolean hrMode, int dt_us, int sr_hz, int sr_pcm_hz) {
         if (sr_pcm_hz <= 0)
             sr_pcm_hz = sr_hz;
 
@@ -1094,7 +1094,7 @@ class Lc3 {
         decoder.plc.lc3_plc_reset();
 
         decoder.x = new float[LC3_DECODER_BUFFER_COUNT(dt_us, sr_pcm_hz)];
-logger.log(Level.DEBUG, decoder.x.length);
+logger.log(Level.TRACE, "buffer: " + decoder.x.length);
 
         return decoder;
     }
@@ -1106,7 +1106,7 @@ logger.log(Level.DEBUG, decoder.x.length);
     /**
      * Decode a frame
      */
-    static boolean lc3_decode(Decoder decoder, byte[] in, int inp, int nBytes, lc3_pcm_format fmt, byte[] pcm, int op, int stride) {
+    public static boolean lc3_decode(Decoder decoder, byte[] in, int inp, int nBytes, lc3_pcm_format fmt, byte[] pcm, int op, int stride) {
 
         // Check parameters
 

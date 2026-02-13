@@ -13,15 +13,25 @@ import javax.sound.sampled.AudioSystem;
 import javax.sound.sampled.spi.FormatConversionProvider;
 
 import vavi.sound.lc3.Lc3Plus;
+import vavi.sound.sampled.lc3.GoogleLc3.Lc3Header;
 
 
 /**
  * Lc3FormatConversionProvider.
+ * <p>
+ * system property
+ * {@code vavi.sound.sampled.lc3.google} ... use google (pure java) engine or not. default {@code false}
+ * </p>
  *
  * @author <a href="mailto:umjammer@gmail.com">Naohide Sano</a> (nsano)
  * @version 0.00 2023/05/31 umjammer initial version <br>
  */
 public class Lc3FormatConversionProvider extends FormatConversionProvider {
+
+    /** system property key */
+    public static final String ENGINE_KEY = "vavi.sound.lc3.google";
+
+    static final boolean google = System.getProperty(ENGINE_KEY, "false").equals("true");
 
     @Override
     public AudioFormat.Encoding[] getSourceEncodings() {
@@ -69,8 +79,13 @@ public class Lc3FormatConversionProvider extends FormatConversionProvider {
                     if (sourceFormat.equals(targetFormat)) {
                         return sourceStream;
                     } else if (sourceFormat.getEncoding() instanceof Lc3Encoding && targetFormat.getEncoding().equals(AudioFormat.Encoding.PCM_SIGNED)) {
-                        Lc3Plus lc3Plus = (Lc3Plus) sourceFormat.getProperty("lc3Plus");
-                        return new Lc3ToPcmAudioInputStream(sourceStream, targetFormat, AudioSystem.NOT_SPECIFIED, lc3Plus);
+                        if (google) {
+                            Lc3Header header = (Lc3Header) sourceFormat.getProperty("googleLc3");
+                            return new GoogleLc3ToPcmAudioInputStream(sourceStream, targetFormat, AudioSystem.NOT_SPECIFIED, header);
+                        } else {
+                            Lc3Plus lc3Plus = (Lc3Plus) sourceFormat.getProperty("lc3Plus");
+                            return new Lc3ToPcmAudioInputStream(sourceStream, targetFormat, AudioSystem.NOT_SPECIFIED, lc3Plus);
+                        }
                     } else if (sourceFormat.getEncoding().equals(AudioFormat.Encoding.PCM_SIGNED) && targetFormat.getEncoding() instanceof Lc3Encoding) {
                         throw new IllegalArgumentException("unable to convert " + sourceFormat + " to " + targetFormat);
                     } else {
@@ -98,8 +113,13 @@ public class Lc3FormatConversionProvider extends FormatConversionProvider {
                         return sourceStream;
                     } else if (sourceFormat.getEncoding() instanceof Lc3Encoding &&
                                targetFormat.getEncoding().equals(AudioFormat.Encoding.PCM_SIGNED)) {
-                        Lc3Plus lc3Plus = (Lc3Plus) sourceFormat.getProperty("lc3Plus");
-                        return new Lc3ToPcmAudioInputStream(sourceStream, targetFormat, AudioSystem.NOT_SPECIFIED, lc3Plus);
+                        if (google) {
+                            Lc3Header header = (Lc3Header) sourceFormat.getProperty("googleLc3");
+                            return new GoogleLc3ToPcmAudioInputStream(sourceStream, targetFormat, AudioSystem.NOT_SPECIFIED, header);
+                        } else {
+                            Lc3Plus lc3Plus = (Lc3Plus) sourceFormat.getProperty("lc3Plus");
+                            return new Lc3ToPcmAudioInputStream(sourceStream, targetFormat, AudioSystem.NOT_SPECIFIED, lc3Plus);
+                        }
                     } else if (sourceFormat.getEncoding().equals(AudioFormat.Encoding.PCM_SIGNED) && targetFormat.getEncoding() instanceof Lc3Encoding) {
                         throw new IllegalArgumentException("unable to convert " + sourceFormat + " to " + targetFormat);
                     } else {
