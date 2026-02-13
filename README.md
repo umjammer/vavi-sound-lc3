@@ -24,10 +24,15 @@
     clip.loop(Clip.LOOP_CONTINUOUSLY);
 ```
 
-system properties (for google's pure java version only)
+### system properties (for google's pure java version only)
 
 * `google.sound.lc3.plus` ... dealing `PLUS` mode , default `false`
 * `google.sound.lc3.hr` ... if `PLUS` mode, dealing `HR` mode, default `false`
+
+### system property
+
+* `vavi.sound.sampled.lc3.google` ... use google (pure java) engine or not. default `false`
+
 
 ## References
 
